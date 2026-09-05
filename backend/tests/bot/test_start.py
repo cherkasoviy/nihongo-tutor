@@ -5,31 +5,12 @@ from aiogram import Dispatcher
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot import texts_ru
-from app.bot.dispatcher import create_dispatcher
-from app.config import get_settings
 from app.services import invite_service, user_service
 from tests.conftest import ADMIN_TG_ID, fresh_tg_id
 from tests.helpers.mocked_bot import MockedBot
 from tests.helpers.updates import command_update
 
 pytestmark = pytest.mark.integration
-
-
-@pytest.fixture
-def bot() -> MockedBot:
-    return MockedBot()
-
-
-@pytest.fixture(scope="session")
-def _dispatcher(migrated_database_url: str) -> Dispatcher:
-    # Routers are module-level singletons and can be attached to one Dispatcher only.
-    return create_dispatcher(get_settings(), sessionmaker=None)  # type: ignore[arg-type]
-
-
-@pytest.fixture
-def dp(_dispatcher: Dispatcher, sessionmaker: async_sessionmaker[AsyncSession]) -> Dispatcher:
-    _dispatcher["sessionmaker"] = sessionmaker
-    return _dispatcher
 
 
 async def _make_invite(sessionmaker: async_sessionmaker[AsyncSession], max_uses: int = 1) -> str:
