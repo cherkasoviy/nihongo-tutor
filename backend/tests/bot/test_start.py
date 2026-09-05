@@ -113,7 +113,14 @@ async def test_admin_command_denied_to_learner_and_stranger(
     assert bot.sent_texts()[-1] == texts_ru.ADMIN_ONLY
 
 
-async def test_help_and_placeholders(dp: Dispatcher, bot: MockedBot) -> None:
+async def test_help_is_available_to_anyone(dp: Dispatcher, bot: MockedBot) -> None:
     await dp.feed_update(bot, command_update(fresh_tg_id(), "/help"))
-    await dp.feed_update(bot, command_update(fresh_tg_id(), "/today"))
-    assert bot.sent_texts() == [texts_ru.HELP, texts_ru.COMING_SOON]
+    assert bot.sent_texts() == [texts_ru.HELP]
+
+
+async def test_learning_commands_require_registration(dp: Dispatcher, bot: MockedBot) -> None:
+    """The Phase 0 placeholder is gone: /today now runs the real handler, which asks a stranger to
+    come in through an invite rather than pretending the feature does not exist yet."""
+    for command in ("/today", "/stats", "/settings"):
+        await dp.feed_update(bot, command_update(fresh_tg_id(), command))
+        assert bot.sent_texts()[-1] == texts_ru.NOT_REGISTERED

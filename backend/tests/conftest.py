@@ -94,7 +94,10 @@ async def db_engine(migrated_database_url: str) -> AsyncIterator[AsyncEngine]:
     finally:
         async with engine.begin() as conn:
             await conn.execute(
-                text("TRUNCATE review_logs, cards, invite_redemptions, invites, ai_usage_ledger, users CASCADE")
+                text(
+                    "TRUNCATE session_steps, learning_sessions, daily_plans, streaks, review_logs, cards, "
+                    "invite_redemptions, invites, ai_usage_ledger, users, items, kana CASCADE"
+                )
             )
         await engine.dispose()
 
