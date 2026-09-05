@@ -94,7 +94,7 @@ async def _candidate_pool(
         .limit(limit)
     )
     rows = (await session.execute(seen_stmt)).all()
-    pool = [Candidate(key=str(k.id), label=k.char, row=k.row) for k, _ in rows]
+    pool = [Candidate(key=str(k.id), label=k.char, row=k.row, glyph=k.char) for k, _ in rows]
 
     if len(pool) < CHOICE_OPTIONS + 2:
         top_up = (
@@ -107,13 +107,17 @@ async def _candidate_pool(
         known = {c.key for c in pool}
         for kana in await session.scalars(top_up):
             if str(kana.id) not in known:
-                pool.append(Candidate(key=str(kana.id), label=kana.char, row=kana.row))
+                pool.append(Candidate(key=str(kana.id), label=kana.char, row=kana.row, glyph=kana.char))
     return pool
 
 
 def _reading_pool(pool: Sequence[Candidate], readings: dict[str, str]) -> list[Candidate]:
-    """The same candidates labelled by their Cyrillic reading rather than their glyph."""
-    return [Candidate(key=c.key, label=readings.get(c.key, c.label), row=c.row) for c in pool]
+    """The same candidates labelled by their Cyrillic reading, with the glyph carried along.
+
+    Keeping the glyph is what lets the confusability ranking still work: it is a fact about the
+    shape, so it must not be lost the moment the button starts showing a reading instead.
+    """
+    return [Candidate(key=c.key, label=readings.get(c.key, c.label), row=c.row, glyph=c.shape) for c in pool]
 
 
 async def _build_planned_steps(
@@ -221,7 +225,7 @@ def _drill_step(
     Recognition shows the glyph and asks for the reading; production shows the reading and asks for
     the glyph. Distractors come from the same pool either way, only the labels swap.
     """
-    correct = Candidate(key=str(kana.id), label=kana.char, row=kana.row)
+    correct = Candidate(key=str(kana.id), label=kana.char, row=kana.row, glyph=kana.char)
     produce_glyph = kind in (StepKind.review_prod,)
 
     if produce_glyph:
@@ -229,7 +233,7 @@ def _drill_step(
         prompt, labels = kana.cyrillic, [o.label for o in options]
     else:
         labelled_pool = _reading_pool(pool, readings)
-        labelled_correct = Candidate(key=correct.key, label=kana.cyrillic, row=kana.row)
+        labelled_correct = Candidate(key=correct.key, label=kana.cyrillic, row=kana.row, glyph=kana.char)
         options, index = distractors.build_choices(labelled_correct, labelled_pool, options=CHOICE_OPTIONS, rng=rng)
         prompt, labels = kana.char, [o.label for o in options]
 

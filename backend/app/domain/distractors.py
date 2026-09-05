@@ -71,11 +71,23 @@ CONFUSABLES: Final[dict[str, tuple[str, ...]]] = _build_confusables()
 
 @dataclass(frozen=True, slots=True)
 class Candidate:
-    """One option the learner could be offered: its glyph and the row it belongs to."""
+    """One option the learner could be offered.
+
+    ``label`` is what appears on the button, which differs by direction: the glyph when the learner
+    is asked for a reading, the reading when they are asked for a glyph. ``glyph`` always carries the
+    character itself, because confusability is a property of the shape and has to survive relabelling
+    — otherwise a recognition grid would look up "си" in a table keyed by シ and never find anything.
+    """
 
     key: str
     label: str
     row: str
+    glyph: str = ""
+
+    @property
+    def shape(self) -> str:
+        """The character this option stands for, whatever the button happens to say."""
+        return self.glyph or self.label
 
 
 def pick_distractors(
@@ -95,14 +107,19 @@ def pick_distractors(
         return []
 
     seen = {correct.key}
+    # Polivanov gives genuinely different characters the same reading — お and を are both «о», じ and
+    # ぢ both «дзи» — so a distractor can be a distinct kana and still be indistinguishable from the
+    # answer once it is labelled. Offering it would mark a learner wrong for reading correctly.
+    used_labels = {correct.label}
     tiers: list[list[Candidate]] = [[], [], []]
-    confusable = set(CONFUSABLES.get(correct.label, ()))
+    confusable = set(CONFUSABLES.get(correct.shape, ()))
 
     for candidate in pool:
-        if candidate.key in seen:
+        if candidate.key in seen or candidate.label in used_labels:
             continue
         seen.add(candidate.key)
-        if candidate.label in confusable:
+        used_labels.add(candidate.label)
+        if candidate.shape in confusable:
             tiers[0].append(candidate)
         elif candidate.row == correct.row:
             tiers[1].append(candidate)

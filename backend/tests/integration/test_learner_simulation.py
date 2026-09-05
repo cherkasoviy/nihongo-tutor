@@ -227,6 +227,32 @@ async def test_the_curriculum_is_introduced_in_order_without_gaps(
     assert orders == list(range(1, len(orders) + 1)), "introduced items must be a prefix of the curriculum"
 
 
+async def test_no_grid_ever_offers_the_same_reading_twice(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """No grid may offer the same visible label twice, whatever the builder assembles.
+
+    Polivanov gives distinct characters identical readings — お and を are both «о», じ and ぢ both
+    «дзи» — so a grid that offered both would mark a learner wrong for reading correctly.
+
+    This is a broad net over whatever the real builder happens to produce, not a reproduction: it
+    only catches the bug when the RNG actually draws a homophone into a grid. The deterministic
+    guarantee lives in tests/unit/test_distractors.py, which pins the property directly.
+    """
+    await _simulate(sessionmaker, accuracy=1.0, days=15)
+
+    async with sessionmaker() as s:
+        grids = [
+            row.payload["choices"]
+            for row in await s.scalars(select(SessionStep))
+            if row.payload.get("mode") == "choice"
+        ]
+
+    assert grids, "the simulation produced no multiple-choice steps"
+    duplicated = [g for g in grids if len(g) != len(set(g))]
+    assert not duplicated, f"{len(duplicated)} grid(s) offered the same label twice, e.g. {duplicated[:3]}"
+
+
 async def test_reopening_a_day_replays_the_same_session(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
