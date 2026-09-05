@@ -5,8 +5,9 @@ habit loop plus a Telegram Mini App for the rich UI. Built on second-language-ac
 (FSRS spaced repetition, retrieval practice, i+1 input, recasts), Russian as the interface language,
 no romaji anywhere. The full design is in [`docs/PLAN.md`](docs/PLAN.md).
 
-**Status: Phase 0 (skeleton).** Invite-only onboarding, admin bootstrap, Mini App auth and the
-deployable stack exist; the learning content and session engine arrive in Phase 1+.
+**Status: Phase 1 (kana bootcamp + SRS).** Invite-only onboarding, the FSRS scheduler, the
+adaptive session engine, the full kana curriculum, reminders, a forgiving streak and the Mini App's
+kana grid all work. Vocabulary, grammar and the AI layer arrive in Phase 2+.
 
 ## Layout
 
@@ -43,13 +44,21 @@ JWT_SECRET=$(openssl rand -hex 32)
 ADMIN_TG_IDS=<your Telegram user id>
 ```
 
+`ADMIN_TG_IDS` is the one value you cannot invent: ask [@userinfobot](https://t.me/userinfobot)
+for your numeric Telegram id. With it empty nobody can create an invite, so nobody — including you —
+can register.
+
 Then:
 
 ```bash
 make migrate        # alembic upgrade head
+make seed           # import the 208-syllable kana curriculum (idempotent)
 make dev            # API on :8000 (autoreload) + Vite on :5173 (proxies /api to :8000)
-make worker         # in another terminal: arq worker (reminder cron is a no-op until Phase 1)
+make worker         # in another terminal: arq worker (runs the reminder cron every minute)
 ```
+
+Optional: `make fetch-kanjivg` downloads the KanjiVG stroke-order SVGs the Mini App's kana detail
+view uses. They are not vendored (separate licence, and the grid is complete without them).
 
 Useful URLs: `http://localhost:8000/healthz`, `http://localhost:8000/api/docs`.
 
@@ -74,10 +83,13 @@ Integration tests use `TEST_DATABASE_URL` when set (any reachable Postgres), oth
 `TEST_DATABASE_URL=postgresql+asyncpg://nihongo:nihongo@localhost:5432/nihongo make test` is the
 fastest loop.
 
-Phase 0 test coverage: initData HMAC (valid / expired / tampered / wrong token), JWT issue and
-verify, webhook secret-token check, concurrent redemption of a `max_uses=1` invite
-(`SELECT ... FOR UPDATE`), API auth exchange and admin guard, `/start` and `/admin` handlers through
-the real Dispatcher with a network-less bot.
+Test coverage: initData HMAC (valid / expired / tampered / wrong token), JWT issue and verify,
+webhook secret-token check, concurrent redemption of a `max_uses=1` invite (`SELECT ... FOR UPDATE`),
+API auth exchange and admin guard, and the handlers through the real Dispatcher with a network-less
+bot. Phase 1 adds: FSRS property tests, planner thresholds, interleaving constraints and seeded
+determinism, the streak across DST, the reminder cron over six timezones and both transition days,
+callback idempotency and in-place edits, kana-import idempotency, and a simulated learner walking 30
+consecutive days.
 
 ### Database migrations
 
@@ -91,7 +103,25 @@ Models live in `backend/app/db/models/`; every module must be imported in
 `backend/app/db/models/__init__.py` so autogenerate sees it. CI runs `alembic upgrade head` and
 `alembic check` on an empty Postgres, so a model change without a migration fails the build.
 
-## How onboarding works (Phase 0)
+## How a lesson works (Phase 1)
+
+1. `/today` builds the day's session. The planner decides how many new syllables to introduce from
+   the learner's due-review backlog, their 7-day recall rate and how many days they have missed —
+   the rule is in [`docs/PLAN.md`](docs/PLAN.md) and implemented verbatim in
+   `domain/session_planner.py`.
+2. A new syllable follows expanding spacing inside the session: introduced, checked immediately, met
+   again as a production drill at least five steps later, retested at the wrap-up. **Only the
+   wrap-up grade reaches FSRS**; the earlier touches are logged with `intra_session=True` and do not
+   move the schedule, because massed repetition says nothing about long-term retention.
+3. Steps are interleaved under constraints (no three of a kind in a row) with an RNG seeded from the
+   learner and their local date, so reopening today replays the same session.
+4. The bot and the Mini App share one engine. `session_steps.status` makes every answer idempotent,
+   so a redelivered callback or a double tap grades once, and a step answered in chat is already
+   closed when the app asks for it.
+5. Finishing at ≥60% of steps or ≥12 minutes counts the day and advances the streak, which forgives
+   one missed day per ISO week.
+
+## How onboarding works
 
 1. Users listed in `ADMIN_TG_IDS` become admins on their first `/start` (existing rows are promoted
    at API start).
@@ -212,7 +242,9 @@ Memory budget on 4 GB: Postgres 256 MB shared buffers, Redis capped at 192 MB, a
 See the phased roadmap in [`docs/PLAN.md`](docs/PLAN.md#phased-roadmap). Phase 1 (kana bootcamp +
 FSRS + session engine v1 + reminders + streaks) is next.
 
-## Licenses of bundled data (from Phase 1)
+## Licenses of bundled data
 
-JMdict/JMnedict (EDRDG, CC BY-SA 4.0), Warodai (CC BY-SA), Tatoeba (CC BY 2.0 FR), KanjiVG
-(CC BY-SA 3.0), Kanjium (free). An attribution page ships in the Mini App with the first import.
+The kana seed in `backend/data/seed/` is hand-authored for this project. KanjiVG (CC BY-SA 3.0) is
+downloaded on demand by `make fetch-kanjivg`, never vendored. From Phase 2: JMdict/JMnedict (EDRDG,
+CC BY-SA 4.0), Warodai (CC BY-SA), Tatoeba (CC BY 2.0 FR), Kanjium (free). An attribution page ships
+in the Mini App with the first import.
