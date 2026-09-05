@@ -5,9 +5,12 @@ import pytest
 
 from app.config import Settings
 from app.main import create_app
-from tests.conftest import TEST_WEBHOOK_SECRET
 
 UPDATE = {"update_id": 1, "message": {"message_id": 1, "date": 0, "chat": {"id": 1, "type": "private"}, "text": "hi"}}
+
+# The secret the app actually resolved: the environment (CI sets its own WEBHOOK_SECRET) wins over
+# both conftest's default and a developer's local .env, so read it back instead of assuming.
+CONFIGURED_SECRET = Settings().webhook_secret.get_secret_value()
 
 
 @pytest.fixture
@@ -31,7 +34,7 @@ async def test_wrong_secret_is_forbidden(client: httpx.AsyncClient) -> None:
 async def test_right_secret_without_bot_is_unavailable(client: httpx.AsyncClient) -> None:
     async with client:
         resp = await client.post(
-            "/tg/webhook", json=UPDATE, headers={"X-Telegram-Bot-Api-Secret-Token": TEST_WEBHOOK_SECRET}
+            "/tg/webhook", json=UPDATE, headers={"X-Telegram-Bot-Api-Secret-Token": CONFIGURED_SECRET}
         )
     assert resp.status_code == 503
 
