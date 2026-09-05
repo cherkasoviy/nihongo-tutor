@@ -1,0 +1,24 @@
+.card { padding: 16px; border-radius: 16px; background: var(--tg-theme-secondary-bg-color, #f7f7f7); }
+
+.progress { height: 4px; border-radius: 2px; background: var(--tg-theme-bg-color, #fff); overflow: hidden; margin-bottom: 20px; }
+.progressFill { height: 100%; background: var(--tg-theme-button-color, #2481cc); transition: width 240ms ease; }
+
+.question { margin: 0 0 8px; color: var(--tg-theme-hint-color, #666); text-align: center; }
+.bigChar { font-size: 5rem; line-height: 1; margin: 8px 0 16px; text-align: center; }
+.readingPrompt { font-size: 2.5rem; line-height: 1; margin: 8px 0 16px; text-align: center; }
+.reading { text-align: center; font-size: 1.25rem; margin: 0 0 12px; color: var(--tg-theme-hint-color, #666); }
+.mnemonic { margin: 0 0 12px; }
+.example { margin: 0 0 16px; }
+
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.choice, .choiceGlyph {
+  padding: 14px; border-radius: 12px;
+  background: var(--tg-theme-bg-color, #fff); color: var(--tg-theme-text-color, #000);
+}
+.choiceGlyph { font-size: 2rem; }
+.choice { font-size: 1.1rem; }
+
+.next { width: 100%; margin-top: 8px; }
+.correct { margin: 16px 0 0; text-align: center; color: #43a047; }
+.wrong { margin: 16px 0 0; text-align: center; color: #e5533d; }
+.done { margin: 0 0 8px; }

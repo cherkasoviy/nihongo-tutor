@@ -70,3 +70,89 @@ async function request<T>(method: string, path: string, body?: unknown, token?: 
 export const postJson = <T>(path: string, body: unknown, token?: string) => request<T>('POST', path, body, token);
 export const getJson = <T>(path: string, token: string) => request<T>('GET', path, undefined, token);
 export const deleteJson = <T>(path: string, token: string) => request<T>('DELETE', path, undefined, token);
+
+// --- Phase 1: kana, session, stats -----------------------------------------
+
+export type KanaScript = 'hiragana' | 'katakana';
+export type KanaKind = 'basic' | 'dakuten' | 'handakuten' | 'yoon';
+export type CardState = 'new' | 'learning' | 'review' | 'relearning';
+
+export interface KanaCell {
+  item_id: string;
+  char: string;
+  script: KanaScript;
+  cyrillic: string;
+  row: string;
+  kind: KanaKind;
+  group_order: number;
+  mnemonic_ru: string | null;
+  example_word: string | null;
+  example_reading: string | null;
+  example_gloss_ru: string | null;
+  introduced: boolean;
+  state: CardState | null;
+  retrievability: number | null;
+  due: string | null;
+  reps: number;
+}
+
+export type StepKind =
+  | 'review_recog'
+  | 'review_prod'
+  | 'intro_item'
+  | 'cloze'
+  | 'listen_choose'
+  | 'shadow'
+  | 'speak'
+  | 'roleplay'
+  | 'wrapup';
+
+export interface SessionStep {
+  id: string;
+  idx: number;
+  kind: StepKind;
+  status: 'pending' | 'shown' | 'answered' | 'skipped';
+  mode: 'choice' | 'ack';
+  prompt: string | null;
+  char: string | null;
+  cyrillic: string | null;
+  mnemonic_ru: string | null;
+  example_word: string | null;
+  example_gloss_ru: string | null;
+  choices: string[];
+}
+
+export interface SessionState {
+  id: string;
+  local_date: string;
+  planned_steps: number;
+  completed_steps: number;
+  outcome: 'in_progress' | 'completed' | 'abandoned';
+  current: SessionStep | null;
+}
+
+export interface AnswerResult {
+  accepted: boolean;
+  correct: boolean;
+  correct_label: string;
+  rating: number | null;
+  session_finished: boolean;
+  next: SessionStep | null;
+}
+
+export interface Stats {
+  kana_total: number;
+  kana_introduced: number;
+  kana_known: number;
+  due_now: number;
+  reviews_7d: number;
+  retention_7d: number | null;
+  streak_current: number;
+  streak_longest: number;
+  freezes_available: number;
+  sessions_completed: number;
+  minutes_7d: number;
+}
+
+export const patchJson = <T>(path: string, body: unknown, token: string) =>
+  request<T>('PATCH', path, body, token);
