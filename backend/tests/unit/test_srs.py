@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Iterator
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -342,3 +343,82 @@ def test_with_due_moves_only_the_due_date(scheduler: srs.Scheduler, shift_days: 
     )
     assert (moved.reps, moved.lapses, moved.last_review) == (state.reps, state.lapses, state.last_review)
     assert state.due == mature(scheduler).due  # the original is untouched
+
+
+# --- timezone normalisation -------------------------------------------------
+# fsrs rejects any datetime whose tzinfo is not `datetime.timezone.utc` *by identity*, so a correct
+# ZoneInfo("UTC") raises just as loudly as a local time. This app converts to the learner's zone for
+# the streak, the reminder and "today", so those instants must not become a landmine at the boundary.
+
+
+@pytest.mark.parametrize(
+    "timezone",
+    [dt.UTC, ZoneInfo("UTC"), ZoneInfo("Europe/Berlin"), ZoneInfo("Asia/Tokyo"), dt.timezone(dt.timedelta(hours=-5))],
+)
+def test_any_aware_datetime_is_accepted_whatever_its_tzinfo(timezone: dt.tzinfo) -> None:
+    scheduler = srs.make_scheduler(enable_fuzzing=False)
+    instant = dt.datetime(2026, 1, 2, 12, 0, tzinfo=dt.UTC)
+    state = srs.new_state(instant)
+
+    result = srs.review(state, srs.Rating.Good, instant.astimezone(timezone), scheduler=scheduler)
+
+    # Same instant expressed differently must schedule identically, not merely avoid crashing.
+    reference = srs.review(state, srs.Rating.Good, instant, scheduler=scheduler)
+    assert result.state.due == reference.state.due
+    assert result.state.stability == reference.state.stability
+
+
+def test_a_naive_datetime_is_refused_rather_than_assumed_to_be_utc() -> None:
+    """Guessing would silently shift a review by the learner's offset — a wrong interval is much
+    harder to notice than an exception."""
+    scheduler = srs.make_scheduler(enable_fuzzing=False)
+    state = srs.new_state(dt.datetime(2026, 1, 2, 12, 0, tzinfo=dt.UTC))
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        srs.review(state, srs.Rating.Good, dt.datetime(2026, 1, 3, 12, 0), scheduler=scheduler)
+
+
+def test_retrievability_accepts_a_local_instant_too() -> None:
+    scheduler = srs.make_scheduler(enable_fuzzing=False)
+    now = dt.datetime(2026, 1, 2, 12, 0, tzinfo=dt.UTC)
+    state = srs.review(srs.new_state(now), srs.Rating.Good, now, scheduler=scheduler).state
+
+    local = now.astimezone(ZoneInfo("Asia/Tokyo"))
+    assert srs.retrievability(state, local, scheduler=scheduler) == srs.retrievability(state, now, scheduler=scheduler)
+
+
+# --- the optimizer's input --------------------------------------------------
+# elapsed_days and scheduled_days are what card_service writes into review_logs, and they are the
+# Phase 4 FSRS optimizer's whole input. Nothing else asserts them, and they are easy to cross-wire.
+
+
+def test_review_reports_the_interval_that_was_actually_waited() -> None:
+    scheduler = srs.make_scheduler(enable_fuzzing=False)
+    start = dt.datetime(2026, 1, 1, 12, 0, tzinfo=dt.UTC)
+
+    first = srs.review(srs.new_state(start), srs.Rating.Good, start, scheduler=scheduler)
+    assert first.elapsed_days == 0, "a card reviewed the day it was created has waited nothing"
+    assert first.scheduled_days == 0, "and nothing was scheduled for it beforehand"
+
+    later = start + dt.timedelta(days=9)
+    second = srs.review(first.state, srs.Rating.Good, later, scheduler=scheduler)
+    assert second.elapsed_days == 9, "elapsed is the gap between the last review and this one"
+    assert second.scheduled_days == max(
+        0, (first.state.due - first.state.last_review).days
+    ), "scheduled is the interval the scheduler had asked for, not the one the learner took"
+
+
+def test_reviewing_early_and_late_are_told_apart() -> None:
+    """The optimizer needs both numbers because they diverge whenever a learner is off schedule."""
+    scheduler = srs.make_scheduler(enable_fuzzing=False)
+    start = dt.datetime(2026, 1, 1, 12, 0, tzinfo=dt.UTC)
+    state = srs.review(srs.new_state(start), srs.Rating.Good, start, scheduler=scheduler).state
+    for _ in range(3):  # push it into review with a multi-day interval
+        state = srs.review(state, srs.Rating.Good, state.due, scheduler=scheduler).state
+
+    asked = max(0, (state.due - state.last_review).days)
+    early = srs.review(state, srs.Rating.Good, state.due - dt.timedelta(days=3), scheduler=scheduler)
+    late = srs.review(state, srs.Rating.Good, state.due + dt.timedelta(days=5), scheduler=scheduler)
+
+    assert early.scheduled_days == asked == late.scheduled_days, "the ask does not change"
+    assert early.elapsed_days < asked < late.elapsed_days, "but the wait does"

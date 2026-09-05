@@ -126,7 +126,66 @@ def interleave(
             max_run=max_run,
             min_gap_after_intro=min_gap_after_intro,
         )
-    return [plan[i] for i in out]
+
+    order = [plan[i] for i in out]
+    _repair_runs(order, free_slots=len(free), max_run=max_run, min_gap_after_intro=min_gap_after_intro)
+    return order
+
+
+def _repair_runs(
+    order: list[PlannedStep],
+    *,
+    free_slots: int,
+    max_run: int,
+    min_gap_after_intro: int,
+) -> None:
+    """Break up runs the greedy could have avoided. Mutates ``order`` in place.
+
+    The greedy pass places one step at a time and never backtracks, so production drills — which
+    only become eligible five steps after their intro — tend to pile up at the tail of the free
+    block even when a due review was available to separate them.
+
+    The repair moves a step to a new position rather than swapping two: a swap would drag the
+    production drill *earlier* and break the very spacing that stranded it, which is why only a
+    relocation can help. Every candidate move is scored with :func:`violations` and kept only if it
+    strictly improves, so the pass can only ever make an order better, and it stops as soon as
+    nothing does. Deterministic (positional candidate order) and bounded, so the result still
+    depends on nothing but the seed.
+    """
+    if free_slots < max_run + 1:
+        return
+
+    def score() -> int:
+        """Only the defects a relocation inside the free block could remove.
+
+        The pinned wrap-up is every-step-one-kind by construction, so ``violations`` will always
+        report a run there on a normal day. Counting it would make the score bottom out above zero
+        and mask whether the body actually improved, so the repair looks at the body's runs and at
+        the spacing rules, which a relocation genuinely can break or fix.
+        """
+        body = [step for step in order if not step.pinned_last]
+        return len(_run_violations(body, max_run)) + len(_spacing_violations(order, min_gap_after_intro))
+
+    current = score()
+    for _ in range(free_slots):  # a hard bound; each pass strictly improves or stops
+        if not current:
+            return
+        improved = False
+        for i in range(free_slots):
+            for j in range(free_slots):
+                if i == j:
+                    continue
+                order.insert(j, order.pop(i))
+                after = score()
+                if after < current:
+                    current = after
+                    improved = True
+                    break
+                order.insert(i, order.pop(j))  # put it back
+            if improved:
+                break
+        if not improved:
+            return
 
 
 def violations(

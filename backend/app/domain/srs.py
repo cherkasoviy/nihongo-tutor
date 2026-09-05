@@ -12,6 +12,10 @@ Two details of FSRS 6 are worth knowing when reading this module:
   our side and collapses on the way into the library.
 * ``step`` is real state. Dropping it would restart a card's learning steps on every process
   restart, so ``cards.step`` persists it.
+* It rejects any aware datetime whose ``tzinfo`` is not ``datetime.timezone.utc`` *by identity* — a
+  correct ``ZoneInfo("UTC")`` raises just as loudly as a local time. Since this app converts to the
+  learner's zone all over the place (the streak, the reminder, "today"), every instant is normalised
+  on the way in rather than leaving that trap for a caller to fall into.
 """
 
 from __future__ import annotations
@@ -110,6 +114,17 @@ def make_scheduler(
     return Scheduler(parameters=tuple(parameters), desired_retention=retention, enable_fuzzing=enable_fuzzing)
 
 
+def _as_utc(value: dt.datetime) -> dt.datetime:
+    """Normalise to the exact ``timezone.utc`` instance the library insists on.
+
+    Naive datetimes are refused rather than assumed to be UTC: guessing would silently shift a
+    review by the learner's offset, and a wrong interval is far harder to notice than an exception.
+    """
+    if value.tzinfo is None:
+        raise ValueError("datetime must be timezone-aware")
+    return value.astimezone(dt.UTC)
+
+
 def new_state(now: dt.datetime) -> SrsState:
     """A card that exists but has never been shown; due immediately."""
     return SrsState(state=CardState.new, step=0, due=now)
@@ -118,14 +133,14 @@ def new_state(now: dt.datetime) -> SrsState:
 def _to_fsrs(state: SrsState) -> FsrsCard:
     if state.is_new:
         # A virgin card: no stability/difficulty yet, sitting on the first learning step.
-        return FsrsCard(state=State.Learning, step=0, due=state.due, last_review=None)
+        return FsrsCard(state=State.Learning, step=0, due=_as_utc(state.due), last_review=None)
     return FsrsCard(
         state=_TO_FSRS[state.state],
         step=state.step,
         stability=state.stability,
         difficulty=state.difficulty,
-        due=state.due,
-        last_review=state.last_review,
+        due=_as_utc(state.due),
+        last_review=None if state.last_review is None else _as_utc(state.last_review),
     )
 
 
@@ -152,6 +167,7 @@ def review(
     the same ratings through but the caller marks their log rows ``intra_session`` so the optimizer
     ignores them (massed repetition would bias the fit).
     """
+    now = _as_utc(now)
     before = state.state
     elapsed = _elapsed_days(state, now)
     scheduled = _scheduled_days(state)
@@ -188,7 +204,7 @@ def retrievability(state: SrsState, now: dt.datetime, *, scheduler: Scheduler) -
     """
     if state.is_new or state.stability is None:
         return 0.0
-    value = scheduler.get_card_retrievability(_to_fsrs(state), now)
+    value = scheduler.get_card_retrievability(_to_fsrs(state), _as_utc(now))
     return float(value)
 
 

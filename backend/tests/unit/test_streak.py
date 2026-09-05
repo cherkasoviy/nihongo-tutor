@@ -122,10 +122,22 @@ def test_freezes_do_not_accumulate_across_unbroken_weeks() -> None:
 
 
 def test_registering_the_same_local_date_twice_is_idempotent() -> None:
-    once = register_activity(StreakState(), MON)
+    """Built up over several days first, deliberately.
 
-    assert register_activity(once, MON) == once
-    assert register_activity(once, MON - 3 * DAY) == once  # a late job cannot rewrite history
+    On a one-day streak this test would be vacuous: without the same-date guard, re-registering
+    falls through to the reset branch and produces current=1 — exactly what a correct no-op returns.
+    Only a streak longer than one can tell the two apart.
+    """
+    state = StreakState()
+    for offset in range(5):
+        state = register_activity(state, MON + offset * DAY)
+    assert state.current == 5
+
+    friday = MON + 4 * DAY
+    assert register_activity(state, friday) == state
+    assert register_activity(state, friday).current == 5, "a repeat must not restart the chain"
+    assert register_activity(state, MON) == state  # a late job cannot rewrite history
+    assert register_activity(state, friday - 3 * DAY) == state
 
 
 def test_longest_never_decreases() -> None:
