@@ -1,7 +1,7 @@
 # secrets: only .env.example is tracked
 .env
 .env.*
-!infra/.env.example
+!.env.example
 
 # python
 __pycache__/
