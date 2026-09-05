@@ -1,0 +1,129 @@
+# Production stack for one VM (GCP e2-medium). Run from the repo root:
+#   docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
+# Secrets live only in infra/.env (see .env.example); nothing here is environment-specific.
+
+name: nihongo
+
+x-backend: &backend
+  build:
+    context: ..
+    dockerfile: infra/backend.Dockerfile
+  image: nihongo-backend:local
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    AUDIO_DIR: /data/audio
+  volumes:
+    - audio:/data/audio
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in infra/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - miniapp_dist:/srv/miniapp:ro
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  api:
+    <<: *backend
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
+                     --proxy-headers --forwarded-allow-ips='*' --no-server-header"
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    <<: *backend
+    command: arq app.workers.worker.WorkerSettings
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy  # api runs migrations first
+    healthcheck:
+      test: ["CMD", "arq", "--check", "app.workers.worker.WorkerSettings"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  miniapp:
+    # Builds the static bundle and copies it into the volume Caddy serves, then exits.
+    build:
+      context: ..
+      dockerfile: infra/miniapp.Dockerfile
+    image: nihongo-miniapp:local
+    restart: "no"
+    volumes:
+      - miniapp_dist:/srv/miniapp
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nihongo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-nihongo}
+    command: postgres -c shared_buffers=256MB -c max_connections=60
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "3" }
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 192mb --maxmemory-policy noeviction
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
+  audio:
+  caddy_data:
+  caddy_config:
+  miniapp_dist:

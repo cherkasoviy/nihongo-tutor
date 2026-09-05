@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master", "claude/**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (ruff, black, mypy, pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nihongo
+          POSTGRES_PASSWORD: nihongo
+          POSTGRES_DB: nihongo_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U nihongo -d nihongo_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://nihongo:nihongo@localhost:5432/nihongo_test
+      # Non-secret placeholders so Settings validates; real values never live in CI.
+      BOT_TOKEN: "123456789:TEST-TOKEN-do-not-use-in-production-xx"
+      JWT_SECRET: "ci-jwt-secret-not-for-production-0123456789abcdef"
+      WEBHOOK_SECRET: "ci-webhook-secret-not-for-production"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv python install 3.12
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run black --check .
+      - run: uv run mypy
+      - name: alembic upgrade head + drift check
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
+        env:
+          DB_URL: ${{ env.TEST_DATABASE_URL }}
+      - run: uv run pytest -q
+
+  miniapp:
+    name: miniapp (tsc, vite build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: miniapp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: miniapp/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+
+  infra:
+    name: infra (compose config, shell syntax)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: validate compose files
+        run: |
+          cp infra/.env.example infra/.env   # services reference env_file: .env
+          docker compose -f infra/docker-compose.yml --env-file infra/.env config -q
+          docker compose -f infra/docker-compose.dev.yml config -q
+          rm infra/.env
+      - run: bash -n infra/scripts/*.sh
+      - name: no secrets committed
+        run: |
+          if git ls-files | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.env\.example$'; then
+            echo "::error::.env file committed"; exit 1
+          fi

@@ -1,0 +1,40 @@
+# Caddy terminates TLS (Let's Encrypt), serves the Mini App bundle and proxies API/webhook to FastAPI.
+{
+	admin 0.0.0.0:2019
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), geolocation=()"
+		# Telegram Web opens Mini Apps in an iframe, so no X-Frame-Options / frame-ancestors here.
+		-Server
+	}
+
+	@backend path /api/* /tg/webhook /healthz /audio/*
+	handle @backend {
+		reverse_proxy api:8000 {
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	handle {
+		root * /srv/miniapp
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		header /index.html Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

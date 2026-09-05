@@ -1,0 +1,28 @@
+# Local development: only the stateful services. API, worker and Vite run on the host.
+#   docker compose -f infra/docker-compose.dev.yml up -d
+name: nihongo-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: nihongo
+      POSTGRES_PASSWORD: nihongo
+      POSTGRES_DB: nihongo
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nihongo -d nihongo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata_dev:
