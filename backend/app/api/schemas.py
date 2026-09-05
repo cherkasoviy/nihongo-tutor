@@ -72,3 +72,88 @@ class HealthOut(BaseModel):
     status: str
     env: str
     version: str
+
+
+# --- Phase 1: kana, session, stats, settings ---------------------------------
+
+
+class KanaCellOut(BaseModel):
+    """One cell of the Mini App's kana grid."""
+
+    item_id: uuid.UUID
+    char: str
+    script: str
+    cyrillic: str
+    row: str
+    kind: str
+    group_order: int
+    mnemonic_ru: str | None
+    example_word: str | None
+    example_reading: str | None
+    example_gloss_ru: str | None
+    introduced: bool
+    state: str | None
+    retrievability: float | None
+    due: dt.datetime | None
+    reps: int
+
+
+class SessionStepOut(BaseModel):
+    id: uuid.UUID
+    idx: int
+    kind: str
+    status: str
+    prompt: str | None = None
+    char: str | None = None
+    cyrillic: str | None = None
+    mnemonic_ru: str | None = None
+    example_word: str | None = None
+    example_gloss_ru: str | None = None
+    choices: list[str] = Field(default_factory=list)
+    mode: str = "choice"
+
+
+class SessionOut(BaseModel):
+    id: uuid.UUID
+    local_date: dt.date
+    planned_steps: int
+    completed_steps: int
+    outcome: str
+    current: SessionStepOut | None = None
+
+
+class AnswerIn(BaseModel):
+    choice: int | None = Field(default=None, ge=0, le=15)
+    self_grade: str | None = Field(default=None, pattern="^(forgot|knew|easy)$")
+    acknowledged: bool = False
+
+
+class AnswerOut(BaseModel):
+    accepted: bool
+    correct: bool
+    correct_label: str
+    rating: int | None
+    session_finished: bool
+    next: SessionStepOut | None = None
+
+
+class StatsOut(BaseModel):
+    kana_total: int
+    kana_introduced: int
+    kana_known: int
+    due_now: int
+    reviews_7d: int
+    retention_7d: float | None
+    streak_current: int
+    streak_longest: int
+    freezes_available: int
+    sessions_completed: int
+    minutes_7d: float
+
+
+class SettingsIn(BaseModel):
+    timezone: str | None = Field(default=None, max_length=64)
+    reminder_time: dt.time | None = None
+    clear_reminder: bool = False
+    daily_minutes_target: int | None = Field(default=None, ge=5, le=60)
+    furigana_mode: str | None = Field(default=None, pattern="^(always|auto|off)$")
