@@ -83,11 +83,17 @@ class Candidate:
     label: str
     row: str
     glyph: str = ""
+    reading: str = ""
 
     @property
     def shape(self) -> str:
         """The character this option stands for, whatever the button happens to say."""
         return self.glyph or self.label
+
+    @property
+    def answer(self) -> str:
+        """What this option would mean as an answer, for deciding whether two options collide."""
+        return self.reading or self.label
 
 
 def pick_distractors(
@@ -108,17 +114,24 @@ def pick_distractors(
 
     seen = {correct.key}
     # Polivanov gives genuinely different characters the same reading — お and を are both «о», じ and
-    # ぢ both «дзи» — so a distractor can be a distinct kana and still be indistinguishable from the
-    # answer once it is labelled. Offering it would mark a learner wrong for reading correctly.
+    # ぢ both «дзи» — and that collides in *both* directions, for different reasons:
+    #
+    #   recognition ("how is お read?")   two buttons would literally both say «о»
+    #   production  ("which reads «о»?")  お and を are two honest answers to one question
+    #
+    # So an option is rejected when either its visible label or the reading behind it matches the
+    # answer's. Either way the learner would be marked wrong for being right.
     used_labels = {correct.label}
+    used_answers = {correct.answer}
     tiers: list[list[Candidate]] = [[], [], []]
     confusable = set(CONFUSABLES.get(correct.shape, ()))
 
     for candidate in pool:
-        if candidate.key in seen or candidate.label in used_labels:
+        if candidate.key in seen or candidate.label in used_labels or candidate.answer in used_answers:
             continue
         seen.add(candidate.key)
         used_labels.add(candidate.label)
+        used_answers.add(candidate.answer)
         if candidate.shape in confusable:
             tiers[0].append(candidate)
         elif candidate.row == correct.row:

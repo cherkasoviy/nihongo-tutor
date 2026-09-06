@@ -40,6 +40,28 @@ def test_a_distractor_never_repeats_the_correct_answers_label(left: str, right: 
     assert labels.count(reading) == 1
 
 
+@pytest.mark.parametrize(("left", "right", "reading"), HOMOPHONES)
+def test_a_production_prompt_never_has_two_right_answers(left: str, right: str, reading: str) -> None:
+    """The other half of the same collision, and the label check alone does not catch it.
+
+    Production asks «Какой знак читается как о?» and the options are glyphs, so お and を have
+    *different* labels — but both are honest answers to that question. The grid must offer one.
+    """
+    correct = Candidate(key="a", label=left, row="a", glyph=left, reading=reading)
+    pool = [
+        Candidate(key="b", label=right, row="wa", glyph=right, reading=reading),  # same reading
+        Candidate(key="c", label="か", row="ka", glyph="か", reading="ка"),
+        Candidate(key="d", label="さ", row="sa", glyph="さ", reading="са"),
+        Candidate(key="e", label="た", row="ta", glyph="た", reading="та"),
+    ]
+    choices, index = build_choices(correct, pool, options=4, rng=_rng())
+
+    assert choices[index].label == left
+    assert right not in [c.label for c in choices], f"{right} also reads «{reading}»"
+    readings = [c.reading for c in choices]
+    assert len(readings) == len(set(readings)), f"two options answer the same prompt: {readings}"
+
+
 def test_confusability_is_looked_up_on_the_glyph_not_the_label() -> None:
     """The recognition direction relabels every option to its reading before building the grid.
 
