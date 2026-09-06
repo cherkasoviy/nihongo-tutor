@@ -1,4 +1,8 @@
-"""``/help`` and placeholders for commands that arrive in later phases."""
+"""``/help``.
+
+Phase 1 implements every command this module used to stub out, so the placeholder is gone; the
+learning commands live in ``handlers/session.py`` and ``handlers/progress.py``.
+"""
 
 from __future__ import annotations
 
@@ -14,8 +18,3 @@ router = Router(name="help")
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     await message.answer(texts_ru.HELP)
-
-
-@router.message(Command("today", "review", "stats", "settings", "pause", "resume"))
-async def cmd_coming_soon(message: Message) -> None:
-    await message.answer(texts_ru.COMING_SOON)

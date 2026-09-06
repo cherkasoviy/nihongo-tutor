@@ -1,6 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { deleteJson, getJson, postJson, type InviteOut, type UserOut } from '@/api/client';
+import {
+  deleteJson,
+  getJson,
+  postJson,
+  type AnswerResult,
+  type InviteOut,
+  type KanaCell,
+  type KanaScript,
+  type SessionState,
+  type Stats,
+  type UserOut,
+} from '@/api/client';
 import { ensureToken } from '@/tg/auth';
 
 export function useMe() {
@@ -32,5 +43,44 @@ export function useRevokeInvite() {
   return useMutation({
     mutationFn: async (id: string) => deleteJson<InviteOut>(`/api/admin/invites/${id}`, await ensureToken()),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'invites'] }),
+  });
+}
+
+export function useKanaGrid(script?: KanaScript) {
+  return useQuery({
+    queryKey: ['kana', script ?? 'all'],
+    queryFn: async () =>
+      getJson<KanaCell[]>(`/api/content/kana${script ? `?script=${script}` : ''}`, await ensureToken()),
+    staleTime: 60_000,
+  });
+}
+
+export function useStats() {
+  return useQuery({
+    queryKey: ['stats'],
+    queryFn: async () => getJson<Stats>('/api/stats', await ensureToken()),
+  });
+}
+
+/** Starts (or resumes) today's session. Idempotent server-side, so re-mounting is harmless. */
+export function useStartSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => postJson<SessionState>('/api/session/today', {}, await ensureToken()),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['stats'] }),
+  });
+}
+
+export function useAnswerStep() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { stepId: string; body: { choice?: number; self_grade?: string; acknowledged?: boolean } }) =>
+      postJson<AnswerResult>(`/api/session/steps/${vars.stepId}/answer`, vars.body, await ensureToken()),
+    onSuccess: (result) => {
+      if (result.session_finished) {
+        void qc.invalidateQueries({ queryKey: ['stats'] });
+        void qc.invalidateQueries({ queryKey: ['kana'] });
+      }
+    },
   });
 }

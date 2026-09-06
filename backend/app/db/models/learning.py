@@ -8,14 +8,18 @@ from typing import Any
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     Enum,
     Float,
     ForeignKey,
     Index,
     Integer,
     SmallInteger,
+    String,
     UniqueConstraint,
+    func,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -48,6 +52,8 @@ class Card(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     direction: Mapped[CardDirection] = mapped_column(Enum(CardDirection, name="card_direction"), nullable=False)
 
     state: Mapped[CardState] = mapped_column(Enum(CardState, name="card_state"), default=CardState.new, nullable=False)
+    # Index into the scheduler's learning_steps/relearning_steps; None once the card reaches review.
+    step: Mapped[int | None] = mapped_column(Integer)
     stability: Mapped[float | None] = mapped_column(Float)
     difficulty: Mapped[float | None] = mapped_column(Float)
     due: Mapped[dt.datetime] = mapped_column(nullable=False)
@@ -80,3 +86,118 @@ class ReviewLog(UUIDPrimaryKeyMixin, Base):
     auto_graded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     intra_session: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     answer_payload: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
+
+
+class SessionClient(enum.StrEnum):
+    bot = "bot"
+    miniapp = "miniapp"
+
+
+class SessionOutcome(enum.StrEnum):
+    in_progress = "in_progress"
+    completed = "completed"
+    abandoned = "abandoned"
+
+
+class StepKind(enum.StrEnum):
+    """The step vocabulary of the session engine. Phase 1 emits the kana-stage subset;
+    cloze/listen_choose/speak/roleplay are reserved for Phases 2-3."""
+
+    review_recog = "review_recog"
+    review_prod = "review_prod"
+    intro_item = "intro_item"
+    cloze = "cloze"
+    listen_choose = "listen_choose"
+    shadow = "shadow"
+    speak = "speak"
+    roleplay = "roleplay"
+    wrapup = "wrapup"
+
+
+class StepStatus(enum.StrEnum):
+    pending = "pending"
+    shown = "shown"
+    answered = "answered"
+    skipped = "skipped"
+
+
+class LearningSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One day's lesson. ``local_date`` is the learner's own date, so a session is never split
+    by UTC midnight and "today" means the same thing in the bot and the Mini App."""
+
+    __tablename__ = "learning_sessions"
+    __table_args__ = (Index("ix_learning_sessions_user_date", "user_id", "local_date"),)
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    local_date: Mapped[dt.date] = mapped_column(Date, nullable=False)
+    started_at: Mapped[dt.datetime] = mapped_column(nullable=False)
+    finished_at: Mapped[dt.datetime | None]
+    client: Mapped[SessionClient] = mapped_column(
+        Enum(SessionClient, name="session_client"), default=SessionClient.bot, nullable=False
+    )
+    planned_steps: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completed_steps: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    outcome: Mapped[SessionOutcome] = mapped_column(
+        Enum(SessionOutcome, name="session_outcome"), default=SessionOutcome.in_progress, nullable=False
+    )
+    active_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class SessionStep(UUIDPrimaryKeyMixin, Base):
+    """A materialised step. ``status`` is what makes a callback idempotent: answering a step that
+    is no longer ``pending``/``shown`` is a no-op, so a double tap cannot grade twice."""
+
+    __tablename__ = "session_steps"
+    __table_args__ = (
+        UniqueConstraint("session_id", "idx"),
+        Index("ix_session_steps_session_status", "session_id", "status"),
+    )
+
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[StepKind] = mapped_column(Enum(StepKind, name="step_kind"), nullable=False)
+    card_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cards.id", ondelete="CASCADE"))
+    item_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("items.id", ondelete="CASCADE"))
+    payload: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
+    status: Mapped[StepStatus] = mapped_column(
+        Enum(StepStatus, name="step_status"), default=StepStatus.pending, nullable=False
+    )
+    result: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
+    shown_at: Mapped[dt.datetime | None]
+    answered_at: Mapped[dt.datetime | None]
+    tg_message_id: Mapped[int | None] = mapped_column(Integer)
+
+
+class DailyPlan(Base):
+    """The blueprint the planner produced for one learner-day; steps are materialised lazily."""
+
+    __tablename__ = "daily_plans"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    local_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    new_items_target: Mapped[int] = mapped_column(Integer, nullable=False)
+    due_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    retention_7d: Mapped[float | None] = mapped_column(Float)
+    backlog_ratio: Mapped[float] = mapped_column(Float, nullable=False)
+    plan: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now(), nullable=False)
+
+
+class Streak(Base):
+    """Forgiving streak: one automatic freeze per week covers a single missed day.
+
+    Dates are the learner's local dates, so a streak never breaks because of a timezone or DST shift.
+    """
+
+    __tablename__ = "streaks"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    current: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    longest: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_active_date: Mapped[dt.date | None] = mapped_column(Date)
+    freezes_available: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    freeze_earned_week: Mapped[str | None] = mapped_column(String(16))
+    freeze_used_dates: Mapped[list[dt.date]] = mapped_column(ARRAY(Date), default=list, nullable=False)
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now(), onupdate=func.now(), nullable=False)

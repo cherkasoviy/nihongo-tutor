@@ -9,7 +9,8 @@ COMPOSE_DEV := docker compose -f infra/docker-compose.dev.yml
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file infra/.env
 
 .PHONY: help setup dev api worker miniapp db-up db-down test test-unit lint fmt typecheck check \
-        migrate revision downgrade openapi gen-api seed gen-content compose-up compose-down compose-logs deploy backup
+        migrate revision downgrade openapi gen-api seed fetch-kanjivg gen-content compose-up compose-down \
+        compose-logs deploy backup
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -79,12 +80,15 @@ openapi: ## Export backend/openapi.json from the FastAPI app
 gen-api: openapi ## Regenerate miniapp/src/api/schema.d.ts from the OpenAPI spec
 	cd $(MINIAPP) && npm run gen:api
 
-# --- content (Phase 1+) ------------------------------------------------------
-seed: ## Import seed content (kana etc.)
-	$(UV) nihongo-content check
+# --- content -----------------------------------------------------------------
+seed: ## Import the kana seed into the database (idempotent, safe to re-run)
+	$(UV) nihongo-content import-kana
+
+fetch-kanjivg: ## Download KanjiVG stroke-order SVGs for kana into miniapp/public/kanjivg
+	@bash infra/scripts/fetch_kanjivg.sh
 
 gen-content: ## Run AI content generation batches
-	@echo "content pipeline arrives with Phase 2 (see docs/PLAN.md)"; $(UV) nihongo-content check
+	@echo "content generation arrives with Phase 2 (see docs/PLAN.md)"; $(UV) nihongo-content check
 
 # --- production --------------------------------------------------------------
 compose-up: ## Build and start the production stack (needs infra/.env)

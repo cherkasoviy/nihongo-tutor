@@ -20,8 +20,9 @@ node_modules/
 miniapp/dist/
 *.tsbuildinfo
 
-# data & runtime
-data/
+# data & runtime (seed content under backend/data/seed IS tracked)
+/data/
+backend/data/audio/
 *.log
 backups/
 

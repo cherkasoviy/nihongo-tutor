@@ -5,31 +5,12 @@ from aiogram import Dispatcher
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot import texts_ru
-from app.bot.dispatcher import create_dispatcher
-from app.config import get_settings
 from app.services import invite_service, user_service
 from tests.conftest import ADMIN_TG_ID, fresh_tg_id
 from tests.helpers.mocked_bot import MockedBot
 from tests.helpers.updates import command_update
 
 pytestmark = pytest.mark.integration
-
-
-@pytest.fixture
-def bot() -> MockedBot:
-    return MockedBot()
-
-
-@pytest.fixture(scope="session")
-def _dispatcher(migrated_database_url: str) -> Dispatcher:
-    # Routers are module-level singletons and can be attached to one Dispatcher only.
-    return create_dispatcher(get_settings(), sessionmaker=None)  # type: ignore[arg-type]
-
-
-@pytest.fixture
-def dp(_dispatcher: Dispatcher, sessionmaker: async_sessionmaker[AsyncSession]) -> Dispatcher:
-    _dispatcher["sessionmaker"] = sessionmaker
-    return _dispatcher
 
 
 async def _make_invite(sessionmaker: async_sessionmaker[AsyncSession], max_uses: int = 1) -> str:
@@ -113,7 +94,14 @@ async def test_admin_command_denied_to_learner_and_stranger(
     assert bot.sent_texts()[-1] == texts_ru.ADMIN_ONLY
 
 
-async def test_help_and_placeholders(dp: Dispatcher, bot: MockedBot) -> None:
+async def test_help_is_available_to_anyone(dp: Dispatcher, bot: MockedBot) -> None:
     await dp.feed_update(bot, command_update(fresh_tg_id(), "/help"))
-    await dp.feed_update(bot, command_update(fresh_tg_id(), "/today"))
-    assert bot.sent_texts() == [texts_ru.HELP, texts_ru.COMING_SOON]
+    assert bot.sent_texts() == [texts_ru.HELP]
+
+
+async def test_learning_commands_require_registration(dp: Dispatcher, bot: MockedBot) -> None:
+    """The Phase 0 placeholder is gone: /today now runs the real handler, which asks a stranger to
+    come in through an invite rather than pretending the feature does not exist yet."""
+    for command in ("/today", "/stats", "/settings"):
+        await dp.feed_update(bot, command_update(fresh_tg_id(), command))
+        assert bot.sent_texts()[-1] == texts_ru.NOT_REGISTERED

@@ -46,7 +46,6 @@ HELP = (
     "/pause и /resume — пауза без потери серии\n"
     "/help — эта справка"
 )
-COMING_SOON = "Эта часть ещё в работе — появится в следующей версии."
 OPEN_APP_BUTTON = "Открыть приложение"
 UNKNOWN_COMMAND = "Не знаю такой команды. Список: /help"
 
@@ -73,3 +72,96 @@ ADMIN_HELP = "Подкоманды: <code>/admin invite [макс_использ
 
 def display_name(first_name: str | None, username: str | None) -> str:
     return first_name or (f"@{username}" if username else "друг")
+
+
+# --- занятие ----------------------------------------------------------------
+TODAY_INTRO = "Занятие на сегодня: {steps} шагов, примерно {minutes} мин. Поехали!"
+TODAY_NOTHING_DUE = (
+    "На сегодня всё готово — новых знаков пока нет и повторять нечего.\n"
+    "Возвращайся завтра, а пока можно посмотреть прогресс: /stats"
+)
+TODAY_ALREADY_DONE = (
+    "Сегодняшнее занятие уже сделано 🎉 Серия: {streak}.\n" "Если хочется ещё, есть короткое повторение: /review"
+)
+TODAY_RESUME = "Продолжаем занятие: осталось {left} из {total}."
+REVIEW_NOTHING_DUE = "Сейчас нечего повторять — все знаки ещё отдыхают. Загляни позже."
+
+# Знакомство с новым знаком. Ромадзи не показываем никогда: только знак, кириллица и подсказка.
+STEP_INTRO_KANA = "Новый знак: <b>{char}</b>\nЧитается: <b>{cyrillic}</b>\n\n{mnemonic}"
+STEP_INTRO_KANA_EXAMPLE = "\n\nПример: {word} — {gloss}"
+STEP_INTRO_CONFIRM = "Запомнила? Тогда проверим."
+
+STEP_RECOG_PROMPT = "Как читается этот знак?\n\n<b>{char}</b>"
+STEP_PROD_PROMPT = "Какой знак читается как <b>{cyrillic}</b>?"
+STEP_WRAPUP_PROMPT = "Последняя проверка: <b>{char}</b>"
+
+FEEDBACK_CORRECT = "Верно ✓"
+FEEDBACK_CORRECT_SLOW = "Верно ✓ — но пришлось подумать, повторим ещё."
+FEEDBACK_WRONG = "Не совсем. Правильный ответ: <b>{answer}</b>"
+FEEDBACK_TYPO = "Почти ✓ Правильно: <b>{answer}</b>"
+
+SESSION_DONE = (
+    "Занятие закончено 🎉\n"
+    "Новых знаков: {new_items}, повторений: {reviews}, точность: {accuracy}%.\n"
+    "Серия: {streak} {streak_word}.\n\n"
+    "Завтра: {tomorrow}"
+)
+SESSION_DONE_TOMORROW = "{due} повторений и {new} новых знаков"
+SESSION_DONE_TOMORROW_EMPTY = "только повторения"
+SESSION_STOPPED = "Остановились. Занятие сохранено — вернёшься по /today."
+SESSION_STEP_GONE = "Этот шаг уже пройден."
+
+# --- серия и напоминания ----------------------------------------------------
+STREAK_FREEZE_USED = "Пропущенный день закрыт заморозкой ❄️ Серия продолжается: {streak}."
+REMINDER = "Пора заниматься 🇯🇵 Сегодня примерно {minutes} мин: /today"
+REMINDER_WITH_STREAK = "Пора заниматься 🇯🇵 Серия: {streak} {streak_word}. Сегодня ~{minutes} мин: /today"
+
+# --- статистика -------------------------------------------------------------
+STATS = (
+    "<b>Прогресс</b>\n\n"
+    "Кана: {known} из {total} выучено, {introduced} начато\n"
+    "К повторению сейчас: {due}\n"
+    "Повторений за неделю: {reviews_7d}\n"
+    "Запоминание за неделю: {retention}\n"
+    "Занятий всего: {sessions}, за неделю {minutes_7d} мин\n"
+    "Серия: {streak} (рекорд {longest}){freezes}"
+)
+STATS_RETENTION_UNKNOWN = "пока мало данных"
+STATS_FREEZES = ", заморозок в запасе: {n}"
+
+# --- настройки --------------------------------------------------------------
+SETTINGS = (
+    "<b>Настройки</b>\n\n"
+    "Часовой пояс: {timezone}\n"
+    "Напоминание: {reminder}\n"
+    "Цель в день: {minutes} мин\n"
+    "Фуригана: {furigana}\n\n"
+    "Поменять удобнее в приложении."
+)
+SETTINGS_NO_REMINDER = "выключено"
+PAUSED = "Поставила занятия на паузу. Серия сохранится. Вернуться: /resume"
+RESUMED = "С возвращением! Занятия снова включены: /today"
+ALREADY_PAUSED = "Занятия уже на паузе. Вернуться: /resume"
+ALREADY_ACTIVE = "Занятия и так идут. Сегодняшнее: /today"
+
+
+def streak_word(n: int) -> str:
+    """«день / дня / дней» — русская форма множественного числа."""
+    if 11 <= n % 100 <= 14:
+        return "дней"
+    match n % 10:
+        case 1:
+            return "день"
+        case 2 | 3 | 4:
+            return "дня"
+        case _:
+            return "дней"
+
+
+# --- кнопки -----------------------------------------------------------------
+BUTTON_REVEAL = "Показать ответ"
+BUTTON_FORGOT = "Не помню"
+BUTTON_KNEW = "Помню"
+BUTTON_EASY = "Легко"
+BUTTON_NEXT = "Дальше"
+BUTTON_STOP = "Закончить"
