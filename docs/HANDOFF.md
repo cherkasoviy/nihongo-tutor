@@ -24,8 +24,30 @@ with `docs/PLAN.md` and `README.md`.
   steps for those sections.
 - **KanjiVG stroke order is not vendored.** `make fetch-kanjivg` downloads it; the Mini App renders
   the grid fine without it.
-- **`/review` reuses today's session.** A dedicated five-minute queue needs Phase 2's much larger due
-  pool to be worth building.
+- **Typed answers.** `domain/grading.py` implements the plan's normalisation (jaconv, katakana folded
+  to hiragana) and the rapidfuzz typo threshold, and nothing calls it: the bot has no text-message
+  handler for answers. Free recall covers the same pedagogical ground for kana without asking the
+  learner to type Japanese on a phone, so this waits for Phase 2's cloze steps, where typing is the
+  natural input.
+- **`ai_usage_ledger` and `audio_assets`** exist and are never written; they belong to Phases 2-3.
+
+## Gaps closed after the first local run
+
+Running it for real turned up several things that were built but unreachable. All of these now work
+end to end:
+
+- **The daily reminder.** The cron was complete and tested and could never fire: `reminder_time` was
+  NULL for everyone and onboarding never asked. Joining now asks, `/reminder` changes it, and the
+  Mini App has a settings screen. The Mini App also reports the browser's IANA zone on login, which
+  the backend adopts only while the learner is still on the default.
+- **An extra sitting the same day.** Finishing the lesson used to end with "come back tomorrow".
+  `learning_sessions.kind` now separates the planned lesson from `practice` sittings: no new items,
+  no second chance at the streak, and drills the scheduler did not ask for are logged
+  `intra_session` so cramming cannot push a real review out. `/review` is the plan's five-minute
+  queue rather than an alias for `/today`.
+- **Free recall.** Recognition cards that reach `review` state graduate from a four-option grid to
+  the plan's three-button self-grading, with Hard inferred from the reveal delay.
+- **The stop button**, which was wired to a handler but never rendered.
 
 ## Decisions taken during Phase 1 that are not in PLAN.md
 
