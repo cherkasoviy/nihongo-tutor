@@ -238,3 +238,58 @@ async def test_an_unknown_timezone_is_refused(
     assert resp.status_code == 422
 
     assert (await client.get("/api/auth/me", headers=headers)).json()["timezone"] == "Europe/Moscow"
+
+
+# --- timezone adoption ------------------------------------------------------
+# The reminder cron selects on the learner's local clock, so the zone has to be right. The browser
+# is the only part of the system that knows it, and the plan sources it from the Mini App.
+
+
+async def _login_with_timezone(client: httpx.AsyncClient, tg_id: int, timezone: str | None) -> dict[str, object]:
+    init_data = make_init_data(
+        TEST_BOT_TOKEN, tg_user_id=tg_id, auth_date=int(dt.datetime.now(dt.UTC).timestamp()) - 30
+    )
+    body: dict[str, object] = {"init_data": init_data}
+    if timezone is not None:
+        body["timezone"] = timezone
+    resp = await client.post("/api/auth/telegram", json=body)
+    assert resp.status_code == 200, resp.text
+    return dict(resp.json())
+
+
+async def test_the_browsers_timezone_is_adopted_on_first_login(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    tg_id = await _learner(sessionmaker, with_kana=False)
+    body = await _login_with_timezone(client, tg_id, "Asia/Tokyo")
+    assert body["user"]["timezone"] == "Asia/Tokyo"  # type: ignore[index]
+
+
+async def test_a_timezone_chosen_in_settings_survives_the_next_login(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    """Otherwise opening the app from a laptop abroad would silently move every reminder."""
+    tg_id = await _learner(sessionmaker, with_kana=False)
+    first = await _login_with_timezone(client, tg_id, "Asia/Tokyo")
+    headers = {"Authorization": f"Bearer {first['access_token']}"}
+
+    await client.patch("/api/settings", json={"timezone": "Europe/Berlin"}, headers=headers)
+
+    again = await _login_with_timezone(client, tg_id, "America/New_York")
+    assert again["user"]["timezone"] == "Europe/Berlin"  # type: ignore[index]
+
+
+async def test_a_nonsense_timezone_from_the_client_is_ignored(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    tg_id = await _learner(sessionmaker, with_kana=False)
+    body = await _login_with_timezone(client, tg_id, "Mars/Olympus_Mons")
+    assert body["user"]["timezone"] == "Europe/Moscow"  # type: ignore[index]
+
+
+async def test_login_without_a_timezone_changes_nothing(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    tg_id = await _learner(sessionmaker, with_kana=False)
+    body = await _login_with_timezone(client, tg_id, None)
+    assert body["user"]["timezone"] == "Europe/Moscow"  # type: ignore[index]

@@ -12,6 +12,11 @@ from app.db.models import Invite, User
 
 class TelegramAuthRequest(BaseModel):
     init_data: str = Field(min_length=1, description="Raw window.Telegram.WebApp.initData string")
+    timezone: str | None = Field(
+        default=None,
+        max_length=64,
+        description="IANA zone the browser reports; adopted only while the learner is on the default",
+    )
 
 
 class UserOut(BaseModel):

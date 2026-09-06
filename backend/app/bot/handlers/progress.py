@@ -6,16 +6,19 @@ and a time picker are honest UI rather than a chat prompt that has to parse free
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 
 from aiogram import Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot import texts_ru
+from app.bot.callbacks import SetReminder
 from app.bot.handlers.start import identity_from_message
-from app.bot.keyboards import open_app_keyboard
+from app.bot.keyboards import open_app_keyboard, reminder_keyboard
 from app.config import Settings
 from app.db.models.users import FuriganaMode, User, UserStatus
 from app.services import stats_service, user_service
@@ -111,3 +114,37 @@ async def cmd_resume(message: Message, sessionmaker: async_sessionmaker[AsyncSes
         user.status = UserStatus.active
         await session.commit()
     await message.answer(texts_ru.RESUMED)
+
+
+@router.callback_query(SetReminder.filter())
+async def on_set_reminder(
+    query: CallbackQuery,
+    callback_data: SetReminder,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Record the chosen reminder hour (or switch reminders off)."""
+    async with sessionmaker() as session:
+        user = await user_service.get_by_tg_id(session, query.from_user.id)
+        if user is None:
+            await query.answer(texts_ru.NOT_REGISTERED)
+            return
+        user.reminder_time = None if callback_data.hour < 0 else dt.time(hour=callback_data.hour)
+        await session.commit()
+        chosen = user.reminder_time
+
+    await query.answer()
+    if isinstance(query.message, Message):
+        text = texts_ru.REMINDER_OFF if chosen is None else texts_ru.REMINDER_SET.format(time=chosen.strftime("%H:%M"))
+        with contextlib.suppress(TelegramBadRequest):
+            await query.message.edit_text(text, reply_markup=None)
+
+
+@router.message(Command("reminder"))
+async def cmd_reminder(message: Message, sessionmaker: async_sessionmaker[AsyncSession]) -> None:
+    """Change the reminder time without going through the whole settings screen."""
+    async with sessionmaker() as session:
+        user = await _require_user(message, session)
+        if user is None:
+            return
+        current = user.reminder_time.strftime("%H:%M") if user.reminder_time else texts_ru.SETTINGS_NO_REMINDER
+    await message.answer(texts_ru.SETTINGS_ASK_REMINDER.format(current=current), reply_markup=reminder_keyboard())

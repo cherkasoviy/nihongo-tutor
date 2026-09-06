@@ -10,8 +10,9 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot import texts_ru
-from app.bot.keyboards import open_app_keyboard
+from app.bot.keyboards import open_app_keyboard, reminder_keyboard
 from app.config import Settings
+from app.db.models.users import User
 from app.services.onboarding_service import StartOutcome, handle_start
 from app.services.user_service import TelegramIdentity
 
@@ -57,10 +58,27 @@ async def cmd_start(
             await message.answer(texts_ru.WELCOME_BACK.format(name=name), reply_markup=keyboard)
         case StartOutcome.admin_created:
             await message.answer(texts_ru.WELCOME_ADMIN.format(name=name), reply_markup=keyboard)
+            await _ask_reminder(message, result.user)
         case StartOutcome.invited:
             await message.answer(texts_ru.WELCOME_NEW.format(name=name), reply_markup=keyboard)
+            await _ask_reminder(message, result.user)
         case StartOutcome.needs_code:
             await message.answer(texts_ru.NEEDS_CODE)
         case StartOutcome.invite_invalid:
             assert result.failure is not None
             await message.answer(texts_ru.INVITE_INVALID[result.failure])
+
+
+async def _ask_reminder(message: Message, user: User | None) -> None:
+    """Ask for a reminder time immediately after joining.
+
+    Without this the reminder cron has nothing to select — ``reminder_time`` stays NULL for every
+    learner and the daily nudge, which is the whole point of putting this in a chat app, never
+    fires. Asking here rather than in the Mini App keeps onboarding to one screen.
+    """
+    if user is None:
+        return
+    await message.answer(
+        texts_ru.ASK_REMINDER.format(timezone=user.timezone),
+        reply_markup=reminder_keyboard(),
+    )

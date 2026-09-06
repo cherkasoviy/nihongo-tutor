@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.bot import render, texts_ru
 from app.bot.callbacks import SessionAction, StepAck, StepChoice, StepSelfGrade
 from app.bot.handlers.start import identity_from_message
+from app.bot.keyboards import stop_keyboard
 from app.db.models.learning import DailyPlan, LearningSession, SessionKind, SessionStep, StepStatus, Streak
 from app.db.models.users import User, UserStatus
 from app.domain.grading import SelfGrade
@@ -103,13 +104,17 @@ async def _start(
 
         remaining = learning.planned_steps - learning.completed_steps
         if created and practice:
-            await message.answer(texts_ru.PRACTICE_INTRO.format(steps=learning.planned_steps))
+            opener = texts_ru.PRACTICE_INTRO.format(steps=learning.planned_steps)
         elif created:
             minutes = max(1, round(learning.planned_steps * 8 / 60))
-            await message.answer(texts_ru.TODAY_INTRO.format(steps=learning.planned_steps, minutes=minutes))
+            opener = texts_ru.TODAY_INTRO.format(steps=learning.planned_steps, minutes=minutes)
         else:
             template = texts_ru.PRACTICE_RESUME if practice else texts_ru.TODAY_RESUME
-            await message.answer(template.format(left=remaining, total=learning.planned_steps))
+            opener = template.format(left=remaining, total=learning.planned_steps)
+        # The way out lives on the opening message rather than on every step: a session the learner
+        # cannot stop is a session they will abandon by closing the app, which looks the same to the
+        # scheduler but loses the progress they had earned.
+        await message.answer(opener, reply_markup=stop_keyboard())
 
         await _send_next(message, session, learning)
         await session.commit()

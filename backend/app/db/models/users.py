@@ -22,6 +22,12 @@ class UserStatus(enum.StrEnum):
     blocked = "blocked"
 
 
+# What a learner gets before anyone tells us otherwise. The Mini App knows the browser's real zone
+# and reports it on login; the backend adopts it only while this default is still in place, so a
+# deliberate choice in Settings is never silently overwritten on the next login.
+DEFAULT_TIMEZONE = "Europe/Moscow"
+
+
 class FuriganaMode(enum.StrEnum):
     always = "always"
     auto = "auto"
@@ -41,7 +47,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Enum(UserStatus, name="user_status"), default=UserStatus.active, nullable=False
     )
 
-    timezone: Mapped[str] = mapped_column(String(64), default="Europe/Moscow", nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), default=DEFAULT_TIMEZONE, nullable=False)
     reminder_time: Mapped[dt.time | None] = mapped_column(Time)
     daily_minutes_target: Mapped[int] = mapped_column(Integer, default=17, nullable=False)
     furigana_mode: Mapped[FuriganaMode] = mapped_column(

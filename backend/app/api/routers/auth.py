@@ -10,6 +10,8 @@ from app.api.deps import CurrentUser, SettingsDep
 from app.api.schemas import TelegramAuthRequest, TokenResponse, UserOut
 from app.api.security import InitDataError, create_access_token, verify_init_data
 from app.db.base import SessionDep
+from app.db.models.users import DEFAULT_TIMEZONE
+from app.domain import clock
 from app.services import user_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -31,6 +33,12 @@ async def auth_telegram(body: TelegramAuthRequest, session: SessionDep, settings
     if user is None:
         # Registration happens only through the bot's invite flow.
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="not registered")
+
+    # The plan sources the timezone from the Mini App, which is the only part of the system that
+    # knows it. Adopt it only while the learner still has the default, so a choice made in Settings
+    # survives the next login from a laptop in another country.
+    if body.timezone and user.timezone == DEFAULT_TIMEZONE and clock.zone(body.timezone).key == body.timezone:
+        user.timezone = body.timezone
 
     now = dt.datetime.now(dt.UTC)
     user_service.apply_identity(
