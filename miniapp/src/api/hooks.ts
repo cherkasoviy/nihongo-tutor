@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   deleteJson,
   getJson,
+  patchJson,
   postJson,
   type AnswerResult,
   type InviteOut,
@@ -44,6 +45,25 @@ export function useRevokeInvite() {
   return useMutation({
     mutationFn: async (id: string) => deleteJson<InviteOut>(`/api/admin/invites/${id}`, await ensureToken()),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'invites'] }),
+  });
+}
+
+export interface SettingsPatch {
+  timezone?: string;
+  reminder_time?: string | null;
+  clear_reminder?: boolean;
+  daily_minutes_target?: number;
+  furigana_mode?: string;
+}
+
+export function useUpdateSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: SettingsPatch) => patchJson<UserOut>('/api/settings', body, await ensureToken()),
+    onSuccess: (user) => {
+      qc.setQueryData(['me'], user);
+      void qc.invalidateQueries({ queryKey: ['stats'] });
+    },
   });
 }
 
