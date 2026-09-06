@@ -28,6 +28,7 @@ from app.db.models.learning import (
     DailyPlan,
     LearningSession,
     SessionClient,
+    SessionKind,
     SessionOutcome,
     SessionStep,
     StepKind,
@@ -47,6 +48,13 @@ log = get_logger(__name__)
 
 CHOICE_OPTIONS = 4
 KANA_STAGES = (ItemStage.kana_hira, ItemStage.kana_kata)
+
+# The plan's "/review — short repetition, 5 minutes". A practice sitting is capped rather than
+# open-ended: the point is to let a keen learner do a bit more, not to enable an all-nighter that
+# the scheduler will spend the next fortnight undoing.
+PRACTICE_MINUTES = 5
+PRACTICE_SECONDS_PER_STEP = 8.0
+PRACTICE_TOPUP_MAX = 12
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +145,19 @@ def _reading_pool(pool: Sequence[Candidate], readings: dict[str, str]) -> list[C
     ]
 
 
+async def _readings_for(session: AsyncSession, pools: dict[str, list[Candidate]]) -> dict[str, str]:
+    """Cyrillic reading for every candidate in every pool.
+
+    Needed for the whole pool, not just the day's items: a distractor has to be labelled too, and in
+    the recognition direction the label *is* the reading.
+    """
+    ids = {c.key for pool in pools.values() for c in pool}
+    if not ids:
+        return {}
+    rows = await session.scalars(select(Kana).where(Kana.id.in_([uuid.UUID(i) for i in ids])))
+    return {str(kana.id): kana.cyrillic for kana in rows}
+
+
 async def _build_planned_steps(
     session: AsyncSession,
     *,
@@ -156,12 +177,7 @@ async def _build_planned_steps(
     content = await _load_kana(session, [c.item_id for c in due] + [i.id for i in new_items])
     scripts = {kana.script.value for _, kana in content.values()}
     pools = {s: await _candidate_pool(session, user_id=user.id, script=s) for s in scripts}
-    readings = {str(kana.id): kana.cyrillic for _, kana in content.values()}
-    # Readings for the whole pool, not just today's items: a distractor needs a label too.
-    all_ids = {c.key for pool in pools.values() for c in pool}
-    if all_ids:
-        for kana in await session.scalars(select(Kana).where(Kana.id.in_([uuid.UUID(i) for i in all_ids]))):
-            readings[str(kana.id)] = kana.cyrillic
+    readings = await _readings_for(session, pools)
 
     for card in due:
         found = content.get(card.item_id)
@@ -275,26 +291,77 @@ def _drill_step(
     )
 
 
+async def _open_session(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> LearningSession | None:
+    """An unfinished sitting from today, if there is one. Resuming beats starting something new."""
+    stmt = (
+        select(LearningSession)
+        .where(
+            LearningSession.user_id == user_id,
+            LearningSession.local_date == local_date,
+            LearningSession.outcome == SessionOutcome.in_progress,
+        )
+        .order_by(LearningSession.started_at.desc())
+        .limit(1)
+    )
+    return (await session.scalars(stmt)).first()
+
+
+async def sessions_today(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> list[LearningSession]:
+    stmt = (
+        select(LearningSession)
+        .where(LearningSession.user_id == user_id, LearningSession.local_date == local_date)
+        .order_by(LearningSession.started_at)
+    )
+    return list(await session.scalars(stmt))
+
+
+async def daily_done(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> bool:
+    """Has the planned lesson for this date already been finished?"""
+    stmt = select(LearningSession.id).where(
+        LearningSession.user_id == user_id,
+        LearningSession.local_date == local_date,
+        LearningSession.kind == SessionKind.daily,
+        LearningSession.outcome == SessionOutcome.completed,
+    )
+    return (await session.scalars(stmt)).first() is not None
+
+
 async def start_or_resume(
     session: AsyncSession,
     *,
     user: User,
     now: dt.datetime,
     client: SessionClient = SessionClient.bot,
+    want: SessionKind | None = None,
 ) -> tuple[LearningSession, bool]:
-    """Today's session, creating and materialising it on first call. Returns ``(session, created)``."""
-    today = clock.local_date(now, user.timezone)
-    existing = await session.scalar(
-        select(LearningSession).where(LearningSession.user_id == user.id, LearningSession.local_date == today)
-    )
-    if existing is not None:
-        return existing, False
+    """The sitting to show the learner right now. Returns ``(session, created)``.
 
-    blueprint = await _plan_for(session, user=user, now=now, today=today)
-    # Not cryptography: the point is that reopening today replays the same grids and the same order.
-    seed = interleave.make_seed(user.id, today)
+    An unfinished sitting is always resumed first. Otherwise this starts the day's planned lesson
+    if it has not been done, and an extra *practice* sitting if it has — so finishing today never
+    means being told to come back tomorrow. ``want`` forces the choice (``/review`` asks for
+    practice explicitly); asking for a ``daily`` that is already spent still yields practice, because
+    the day's new items have been issued and re-issuing them would wreck the spacing.
+    """
+    today = clock.local_date(now, user.timezone)
+
+    open_session = await _open_session(session, user_id=user.id, local_date=today)
+    if open_session is not None:
+        return open_session, False
+
+    spent = await daily_done(session, user_id=user.id, local_date=today)
+    kind = SessionKind.practice if (spent or want is SessionKind.practice) else SessionKind.daily
+
+    # Each sitting gets its own seed so a practice run is not a replay of the morning's lesson;
+    # the order is persisted at creation, so reopening one still replays it exactly.
+    ordinal = len(await sessions_today(session, user_id=user.id, local_date=today))
+    seed = interleave.make_seed(user.id, today) + ordinal
     rng = random.Random(seed)  # noqa: S311
-    planned = await _build_planned_steps(session, user=user, blueprint=blueprint, now=now, rng=rng)
+
+    if kind is SessionKind.daily:
+        blueprint = await _plan_for(session, user=user, now=now, today=today)
+        planned = await _build_planned_steps(session, user=user, blueprint=blueprint, now=now, rng=rng)
+    else:
+        planned = await _build_practice_steps(session, user=user, now=now, rng=rng)
     ordered = interleave.interleave(planned, seed=seed)
 
     learning = LearningSession(
@@ -302,8 +369,12 @@ async def start_or_resume(
         local_date=today,
         started_at=now,
         client=client,
+        kind=kind,
         planned_steps=len(ordered),
-        outcome=SessionOutcome.in_progress,
+        # An empty sitting is closed on the spot. Left open it would be resumed forever and the
+        # learner could never start anything else — the "nothing due" case must not become a trap.
+        outcome=SessionOutcome.in_progress if ordered else SessionOutcome.abandoned,
+        finished_at=None if ordered else now,
     )
     session.add(learning)
     await session.flush()
@@ -321,8 +392,63 @@ async def start_or_resume(
             )
         )
     await session.flush()
-    log.info("session created", user_id=str(user.id), date=today.isoformat(), steps=len(ordered))
+    log.info(
+        "session created",
+        user_id=str(user.id),
+        date=today.isoformat(),
+        kind=kind.value,
+        steps=len(ordered),
+    )
     return learning, True
+
+
+async def _build_practice_steps(
+    session: AsyncSession,
+    *,
+    user: User,
+    now: dt.datetime,
+    rng: random.Random,
+) -> list[PlannedStep]:
+    """An extra sitting: reviews the scheduler actually wants, then the shakiest cards as drill.
+
+    No new items, ever. The daily dose is a pedagogical decision the planner already made, and
+    handing out more because the learner is enthusiastic today is how tomorrow's backlog is built.
+
+    Anything genuinely due is a real review and reschedules normally. The top-up is not: those cards
+    were not asked for, so they are marked ``intra_session`` and leave the schedule untouched.
+    """
+    budget = int(PRACTICE_MINUTES * 60 / PRACTICE_SECONDS_PER_STEP)
+    due = await card_service.due_cards(session, user_id=user.id, now=now, limit=budget)
+    topup = await card_service.weakest_cards(
+        session,
+        user_id=user.id,
+        limit=min(PRACTICE_TOPUP_MAX, max(0, budget - len(due))),
+        exclude=[c.id for c in due],
+    )
+
+    content = await _load_kana(session, [c.item_id for c in due + topup])
+    scripts = {kana.script.value for _, kana in content.values()}
+    pools = {s: await _candidate_pool(session, user_id=user.id, script=s) for s in scripts}
+    readings = await _readings_for(session, pools)
+
+    steps: list[PlannedStep] = []
+    for card, is_due in [(c, True) for c in due] + [(c, False) for c in topup]:
+        found = content.get(card.item_id)
+        if found is None:
+            continue
+        _, kana = found
+        steps.append(
+            _drill_step(
+                kind=(StepKind.review_recog if card.direction == CardDirection.recognition else StepKind.review_prod),
+                kana=kana,
+                card=card,
+                pool=pools[kana.script.value],
+                readings=readings,
+                rng=rng,
+                intra_session=not is_due,
+            )
+        )
+    return steps
 
 
 async def _plan_for(
@@ -565,10 +691,14 @@ async def finish(
     learning.finished_at = now
     learning.outcome = SessionOutcome.completed if counted and not abandoned else SessionOutcome.abandoned
 
-    if counted and not abandoned:
+    # Only the planned lesson earns the day. Practice is voluntary extra work, and letting it award
+    # the streak would mean a learner could keep the chain alive on five minutes of review while
+    # never meeting a new syllable — and `/review` can be asked for before `/today` has been done.
+    earns_the_day = counted and not abandoned and learning.kind is SessionKind.daily
+    if earns_the_day:
         await advance_streak(session, user=user, local_day=learning.local_date)
     await session.flush()
-    return counted and not abandoned
+    return earns_the_day
 
 
 async def advance_streak(session: AsyncSession, *, user: User, local_day: dt.date) -> Streak:

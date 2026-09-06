@@ -138,6 +138,32 @@ async def remaining_new_count(session: AsyncSession, *, user_id: uuid.UUID, stag
     return int((await session.execute(stmt)).scalar_one())
 
 
+async def weakest_cards(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    limit: int,
+    exclude: Sequence[uuid.UUID] = (),
+) -> list[Card]:
+    """Introduced cards the learner is closest to forgetting, soonest-due first.
+
+    Used to pad an extra practice session when nothing is genuinely due. These are *not* reviews —
+    the caller logs them with ``intra_session=True`` and does not reschedule, because grading a card
+    the scheduler did not ask for would push its real review out on the strength of a cram.
+    """
+    if limit <= 0:
+        return []
+    stmt = (
+        select(Card)
+        .where(Card.user_id == user_id, Card.suspended.is_(False), Card.state != CardState.new)
+        .order_by(Card.due)
+        .limit(limit)
+    )
+    if exclude:
+        stmt = stmt.where(Card.id.not_in(exclude))
+    return list(await session.scalars(stmt))
+
+
 async def record_review(
     session: AsyncSession,
     *,

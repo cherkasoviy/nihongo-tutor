@@ -116,6 +116,7 @@ class SessionStepOut(BaseModel):
 class SessionOut(BaseModel):
     id: uuid.UUID
     local_date: dt.date
+    kind: str = "daily"
     planned_steps: int
     completed_steps: int
     outcome: str

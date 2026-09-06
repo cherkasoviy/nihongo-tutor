@@ -99,6 +99,19 @@ class SessionOutcome(enum.StrEnum):
     abandoned = "abandoned"
 
 
+class SessionKind(enum.StrEnum):
+    """Why this session exists.
+
+    ``daily`` is the planned lesson: it carries the day's new items and it is what earns the streak.
+    ``practice`` is extra work the learner asked for after finishing — reviews only, never new items,
+    and it cannot earn the day a second time. Keeping them apart is what lets a keen learner do more
+    without the schedule, the streak or the new-item pacing quietly drifting.
+    """
+
+    daily = "daily"
+    practice = "practice"
+
+
 class StepKind(enum.StrEnum):
     """The step vocabulary of the session engine. Phase 1 emits the kana-stage subset;
     cloze/listen_choose/speak/roleplay are reserved for Phases 2-3."""
@@ -122,8 +135,11 @@ class StepStatus(enum.StrEnum):
 
 
 class LearningSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """One day's lesson. ``local_date`` is the learner's own date, so a session is never split
-    by UTC midnight and "today" means the same thing in the bot and the Mini App."""
+    """One sitting. ``local_date`` is the learner's own date, so a session is never split by UTC
+    midnight and "today" means the same thing in the bot and the Mini App.
+
+    A date holds at most one ``daily`` session and any number of ``practice`` ones.
+    """
 
     __tablename__ = "learning_sessions"
     __table_args__ = (Index("ix_learning_sessions_user_date", "user_id", "local_date"),)
@@ -134,6 +150,9 @@ class LearningSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     finished_at: Mapped[dt.datetime | None]
     client: Mapped[SessionClient] = mapped_column(
         Enum(SessionClient, name="session_client"), default=SessionClient.bot, nullable=False
+    )
+    kind: Mapped[SessionKind] = mapped_column(
+        Enum(SessionKind, name="session_kind"), default=SessionKind.daily, nullable=False
     )
     planned_steps: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     completed_steps: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

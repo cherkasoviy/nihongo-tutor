@@ -11,11 +11,13 @@ import datetime as dt
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser
 from app.api.schemas import AnswerIn, AnswerOut, SessionOut, SessionStepOut
 from app.db.base import SessionDep
-from app.db.models.learning import LearningSession, SessionClient, SessionStep
+from app.db.models.learning import LearningSession, SessionClient, SessionKind, SessionStep
+from app.db.models.users import User
 from app.domain.grading import SelfGrade
 from app.services import session_service
 
@@ -46,6 +48,7 @@ def _session_out(learning: LearningSession, current: SessionStep | None) -> Sess
     return SessionOut(
         id=learning.id,
         local_date=learning.local_date,
+        kind=learning.kind.value,
         planned_steps=learning.planned_steps,
         completed_steps=learning.completed_steps,
         outcome=learning.outcome.value,
@@ -55,9 +58,25 @@ def _session_out(learning: LearningSession, current: SessionStep | None) -> Sess
 
 @router.post("/today", response_model=SessionOut)
 async def start_today(user: CurrentUser, session: SessionDep) -> SessionOut:
-    """Start or resume today's session. Idempotent: calling it twice returns the same session."""
+    """Start or resume the current sitting. Idempotent: calling it twice returns the same session.
+
+    Once the day's lesson is finished this hands back an extra *practice* sitting rather than
+    nothing, so a learner who wants to keep going is never told to come back tomorrow.
+    """
+    return await _begin(user, session, want=None)
+
+
+@router.post("/practice", response_model=SessionOut)
+async def start_practice(user: CurrentUser, session: SessionDep) -> SessionOut:
+    """Five minutes of reviews on demand. Never introduces new items and never earns the streak."""
+    return await _begin(user, session, want=SessionKind.practice)
+
+
+async def _begin(user: User, session: AsyncSession, *, want: SessionKind | None) -> SessionOut:
     now = dt.datetime.now(dt.UTC)
-    learning, _ = await session_service.start_or_resume(session, user=user, now=now, client=SessionClient.miniapp)
+    learning, _ = await session_service.start_or_resume(
+        session, user=user, now=now, client=SessionClient.miniapp, want=want
+    )
     current = await session_service.next_step(session, learning_session_id=learning.id)
     if current is not None:
         await session_service.mark_shown(session, step=current, now=now, message_id=None)
