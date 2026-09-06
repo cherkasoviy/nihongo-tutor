@@ -34,8 +34,18 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.content_pipeline.import_kana import import_kana
 from app.db.models.content import Item, ItemStage, ItemType
-from app.db.models.learning import Card, DailyPlan, LearningSession, SessionOutcome, SessionStep, StepKind, Streak
+from app.db.models.learning import (
+    Card,
+    CardState,
+    DailyPlan,
+    LearningSession,
+    SessionOutcome,
+    SessionStep,
+    StepKind,
+    Streak,
+)
 from app.db.models.users import User, UserRole
+from app.domain.grading import SelfGrade
 from app.domain.session_planner import BACKLOG_PAUSE_RATIO, DEFAULT_AVG_REVIEW_SECONDS
 from app.services import session_service, user_service
 from app.services.user_service import TelegramIdentity
@@ -62,6 +72,32 @@ class Simulation:
     introduced: int = 0
     hiragana_introduced: int = 0
     streak: int = 0
+
+
+async def _answer(s: AsyncSession, learner: User, step: SessionStep, now: dt.datetime, *, recalled: bool) -> None:
+    """Answer one step whatever shape it takes.
+
+    Three shapes exist now: an introduction to acknowledge, a multiple-choice grid, and free recall
+    where the learner reveals the answer and grades themselves. A simulation that only understood
+    grids would silently stop exercising the engine the moment a card reached review state.
+    """
+    mode = step.payload.get("mode")
+    if mode == "ack":
+        await session_service.acknowledge(s, step=step, now=now)
+    elif mode == "self":
+        await session_service.reveal(s, step=step, now=now)
+        await session_service.submit_self_grade(
+            s,
+            user=learner,
+            step=step,
+            grade=SelfGrade.knew if recalled else SelfGrade.forgot,
+            now=now,
+        )
+    else:
+        correct = int(step.payload["correct"])
+        options = max(1, len(step.payload["choices"]))
+        pick = correct if recalled else (correct + 1) % options
+        await session_service.submit_choice(s, user=learner, step=step, choice=pick, now=now)
 
 
 async def _simulate(
@@ -123,13 +159,7 @@ async def _simulate(
                 if step is None:
                     break
                 await session_service.mark_shown(s, step=step, now=now, message_id=None)
-                if step.payload.get("mode") == "ack":
-                    await session_service.acknowledge(s, step=step, now=now)
-                else:
-                    correct = int(step.payload["correct"])
-                    options = max(1, len(step.payload["choices"]))
-                    pick = correct if rng.random() < accuracy else (correct + 1) % options
-                    await session_service.submit_choice(s, user=learner, step=step, choice=pick, now=now)
+                await _answer(s, learner, step, now, recalled=rng.random() < accuracy)
 
             await session_service.finish(s, user=learner, learning=learning, now=now)
             await s.commit()
@@ -296,3 +326,33 @@ async def test_reopening_a_day_replays_the_same_session(
         ]
 
     assert order_before == order_after
+
+
+async def test_known_syllables_graduate_from_multiple_choice_to_free_recall(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The drill should get harder as the card gets stronger, not stay the same forever.
+
+    A four-option grid puts the answer on screen — the right shape while a syllable is new, and a
+    much weaker test once it is known. Cards that reach ``review`` switch to free recall: show the
+    glyph, recall it, then self-grade.
+    """
+    await _simulate(sessionmaker, accuracy=1.0, days=8)
+
+    async with sessionmaker() as s:
+        steps = list(await s.scalars(select(SessionStep)))
+
+    modes = {st.payload.get("mode") for st in steps}
+    assert "choice" in modes, "new syllables must still be introduced with a grid"
+    assert "self" in modes, "syllables in review state must graduate to free recall"
+
+    # And the split must follow card state, not chance.
+    self_steps = [st for st in steps if st.payload.get("mode") == "self"]
+    assert all(
+        st.kind is StepKind.review_recog for st in self_steps
+    ), "only recognition graduates; production still needs the glyphs on screen to pick from"
+    async with sessionmaker() as s:
+        states = {
+            c.id: c.state for c in await s.scalars(select(Card).where(Card.id.in_([st.card_id for st in self_steps])))
+        }
+    assert states and all(state is not CardState.new for state in states.values())

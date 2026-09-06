@@ -25,6 +25,7 @@ from app.db.models.learning import (
     Streak,
 )
 from app.db.models.users import User, UserRole
+from app.domain.grading import SelfGrade
 from app.services import session_service, user_service
 from app.services.user_service import TelegramIdentity
 from tests.conftest import fresh_tg_id
@@ -66,8 +67,18 @@ async def _play(
             if step is None:
                 break
             await session_service.mark_shown(s, step=step, now=now, message_id=None)
-            if step.payload.get("mode") == "ack":
+            mode = step.payload.get("mode")
+            if mode == "ack":
                 await session_service.acknowledge(s, step=step, now=now)
+            elif mode == "self":
+                await session_service.reveal(s, step=step, now=now)
+                await session_service.submit_self_grade(
+                    s,
+                    user=learner,
+                    step=step,
+                    grade=SelfGrade.knew if correct else SelfGrade.forgot,
+                    now=now,
+                )
             else:
                 want = int(step.payload["correct"])
                 pick = want if correct else (want + 1) % max(1, len(step.payload["choices"]))

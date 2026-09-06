@@ -134,6 +134,10 @@ class AnswerIn(BaseModel):
     acknowledged: bool = False
 
 
+class RevealOut(BaseModel):
+    answer: str
+
+
 class AnswerOut(BaseModel):
     accepted: bool
     correct: bool

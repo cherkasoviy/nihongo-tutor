@@ -28,6 +28,13 @@ def render_step(step: SessionStep) -> Rendered:
     if step.kind is StepKind.intro_item:
         return Rendered(_intro_text(payload), keyboards.ack_keyboard(step.id))
 
+    if payload.get("mode") == "self":
+        # Free recall: no options on screen, because seeing them is the answer.
+        return Rendered(
+            texts_ru.STEP_SELF_PROMPT.format(char=payload.get("char", "")),
+            keyboards.reveal_keyboard(step.id),
+        )
+
     choices = [str(c) for c in payload.get("choices", [])]
     if step.kind is StepKind.review_prod:
         text = texts_ru.STEP_PROD_PROMPT.format(cyrillic=payload.get("cyrillic", ""))
@@ -50,8 +57,24 @@ def _intro_text(payload: dict[str, Any]) -> str:
     return text
 
 
+def render_revealed(step: SessionStep) -> Rendered:
+    """The answer, plus the three self-grading buttons."""
+    payload: dict[str, Any] = step.payload
+    return Rendered(
+        texts_ru.STEP_SELF_REVEALED.format(char=payload.get("char", ""), cyrillic=payload.get("cyrillic", "")),
+        keyboards.self_grade_keyboard(step.id),
+    )
+
+
 def render_feedback(step: SessionStep, outcome: AnswerOutcome) -> str:
     """The answered step, rewritten in place: the question stays visible above the verdict."""
+    if step.payload.get("mode") == "self":
+        grade = str((step.result or {}).get("self_grade", "knew"))
+        answered = texts_ru.STEP_SELF_REVEALED.format(
+            char=step.payload.get("char", ""), cyrillic=step.payload.get("cyrillic", "")
+        ).split("\n\n")[0]
+        return f"{answered}\n\n{texts_ru.FEEDBACK_SELF.get(grade, texts_ru.FEEDBACK_CORRECT)}"
+
     question = render_step(step).text
     if outcome.correct:
         verdict = texts_ru.FEEDBACK_CORRECT

@@ -8,6 +8,7 @@ import {
   type InviteOut,
   type KanaCell,
   type KanaScript,
+  type RevealResult,
   type SessionState,
   type Stats,
   type UserOut,
@@ -68,6 +69,14 @@ export function useStartSession() {
   return useMutation({
     mutationFn: async () => postJson<SessionState>('/api/session/today', {}, await ensureToken()),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['stats'] }),
+  });
+}
+
+/** Uncovers a free-recall answer without answering it; the wait is what decides Hard. */
+export function useRevealStep() {
+  return useMutation({
+    mutationFn: async (stepId: string) =>
+      postJson<RevealResult>(`/api/session/steps/${stepId}/reveal`, {}, await ensureToken()),
   });
 }
 

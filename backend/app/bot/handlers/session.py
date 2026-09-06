@@ -9,6 +9,7 @@ were already in flight.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 
 from aiogram import F, Router
@@ -19,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot import render, texts_ru
-from app.bot.callbacks import SessionAction, StepAck, StepChoice, StepSelfGrade
+from app.bot.callbacks import SessionAction, StepAck, StepChoice, StepReveal, StepSelfGrade
 from app.bot.handlers.start import identity_from_message
 from app.bot.keyboards import stop_keyboard
 from app.db.models.learning import DailyPlan, LearningSession, SessionKind, SessionStep, StepStatus, Streak
@@ -272,3 +273,29 @@ async def on_stop(
     await query.answer()
     if isinstance(query.message, Message):
         await query.message.answer(texts_ru.SESSION_STOPPED)
+
+
+@router.callback_query(StepReveal.filter())
+async def on_reveal(
+    query: CallbackQuery,
+    callback_data: StepReveal,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Show the answer on a self-graded step, then offer the three grades.
+
+    The step stays open: revealing is not answering. The time taken to get here is what decides
+    Hard, so it is recorded now rather than when the learner finally picks a button.
+    """
+    async with sessionmaker() as session:
+        step = await session.get(SessionStep, callback_data.step_id)
+        if step is None or step.status not in (StepStatus.pending, StepStatus.shown):
+            await query.answer(texts_ru.SESSION_STEP_GONE)
+            return
+        await session_service.reveal(session, step=step, now=dt.datetime.now(dt.UTC))
+        await session.commit()
+        view = render.render_revealed(step)
+
+    await query.answer()
+    if isinstance(query.message, Message):
+        with contextlib.suppress(TelegramBadRequest):
+            await query.message.edit_text(view.text, reply_markup=view.keyboard)

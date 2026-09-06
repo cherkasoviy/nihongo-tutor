@@ -25,6 +25,7 @@ from app.db.models.content import Item, ItemStage, ItemType, Kana
 from app.db.models.learning import (
     Card,
     CardDirection,
+    CardState,
     DailyPlan,
     LearningSession,
     SessionClient,
@@ -259,6 +260,27 @@ def _drill_step(
     the glyph. Distractors come from the same pool either way, only the labels swap.
     """
     correct = Candidate(key=str(kana.id), label=kana.char, row=kana.row, glyph=kana.char, reading=kana.cyrillic)
+
+    # A syllable that has survived a real interval gets free recall — show the glyph, let the learner
+    # answer in their head, then grade themselves. A four-option grid is recognition with the answer
+    # already on screen: the right shape while a character is new, the wrong one once it is known.
+    if kind is StepKind.review_recog and card.state is CardState.review:
+        return PlannedStep(
+            kind=kind,
+            item_key=key or str(card.item_id),
+            card_id=card.id,
+            pinned_last=pinned_last,
+            payload={
+                "mode": "self",
+                "prompt": kana.char,
+                "char": kana.char,
+                "cyrillic": kana.cyrillic,
+                "correct_label": kana.cyrillic,
+                "intra_session": intra_session,
+                "direction": card.direction.value,
+            },
+        )
+
     produce_glyph = kind in (StepKind.review_prod,)
 
     if produce_glyph:
@@ -538,6 +560,19 @@ async def mark_shown(session: AsyncSession, *, step: SessionStep, now: dt.dateti
     await session.flush()
 
 
+async def reveal(session: AsyncSession, *, step: SessionStep, now: dt.datetime) -> str:
+    """Show the answer on a self-graded step and remember how long the learner thought about it.
+
+    The plan infers Hard from "reveal time > 8 s", so the clock that matters stops here, not when
+    the learner finally taps a grade — by then they are reading, not recalling. Idempotent: tapping
+    reveal twice keeps the first, honest measurement.
+    """
+    if step.result is None or "reveal_ms" not in step.result:
+        step.result = {**(step.result or {}), "reveal_ms": _elapsed_ms(step, now)}
+        await session.flush()
+    return str(step.payload.get("correct_label", ""))
+
+
 def _is_open(step: SessionStep) -> bool:
     """A step can be answered exactly once. Telegram redelivers callbacks; learners double-tap."""
     return step.status in (StepStatus.pending, StepStatus.shown)
@@ -595,7 +630,9 @@ async def submit_self_grade(
         return AnswerOutcome(accepted=False, correct=False, rating=None, correct_label=correct_label)
 
     elapsed_ms = _elapsed_ms(step, now)
-    rating = grade_self(grade, reveal_ms=elapsed_ms)
+    # Grade on the thinking time, not the reading time: the reveal tap is what the plan measures.
+    reveal_ms = int((step.result or {}).get("reveal_ms", elapsed_ms))
+    rating = grade_self(grade, reveal_ms=reveal_ms)
     await _apply_grade(
         session,
         user=user,
@@ -603,7 +640,7 @@ async def submit_self_grade(
         rating=rating,
         now=now,
         elapsed_ms=elapsed_ms,
-        payload={"self_grade": grade.value},
+        payload={"self_grade": grade.value, "reveal_ms": reveal_ms},
     )
     return AnswerOutcome(
         accepted=True,

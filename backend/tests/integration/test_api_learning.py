@@ -7,15 +7,17 @@ which is exactly the seam a route test covers and a service test does not.
 """
 
 import datetime as dt
+import uuid
 from collections.abc import AsyncIterator
 
 import httpx
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
 from app.content_pipeline.import_kana import import_kana
-from app.db.models import UserRole
+from app.db.models import Card, CardDirection, CardState, SessionStep, User, UserRole
 from app.main import create_app
 from app.services import user_service
 from app.services.user_service import TelegramIdentity
@@ -293,3 +295,81 @@ async def test_login_without_a_timezone_changes_nothing(
     tg_id = await _learner(sessionmaker, with_kana=False)
     body = await _login_with_timezone(client, tg_id, None)
     assert body["user"]["timezone"] == "Europe/Moscow"  # type: ignore[index]
+
+
+async def test_a_self_graded_step_is_revealed_before_it_is_graded(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    """Revealing is not answering: the step stays open, and the wait is what decides Hard.
+
+    A card only graduates to free recall once it reaches ``review`` state, which takes days of real
+    scheduling. Rather than wait, this puts one card there directly — the API test is about the
+    reveal/grade round trip, and the graduation rule itself is covered by the 30-day simulation.
+    """
+    tg_id = await _learner(sessionmaker)
+    headers = await _auth(client, tg_id)
+
+    # One sitting to create the cards, answered so the session closes.
+    session = (await client.post("/api/session/today", headers=headers)).json()
+    step = session["current"]
+    while step is not None:
+        want = step["char"] if step["kind"] == "review_prod" else step["cyrillic"]
+        body = {"acknowledged": True} if step["mode"] == "ack" else {"choice": step["choices"].index(want)}
+        step = (await client.post(f"/api/session/steps/{step['id']}/answer", json=body, headers=headers)).json()["next"]
+
+    async with sessionmaker() as s:
+        card = (
+            await s.scalars(
+                select(Card)
+                .join(User, User.id == Card.user_id)
+                .where(User.tg_user_id == tg_id, Card.direction == CardDirection.recognition)
+                .limit(1)
+            )
+        ).one()
+        card.state = CardState.review
+        card.due = dt.datetime.now(dt.UTC) - dt.timedelta(days=1)
+        await s.commit()
+
+    practice = (await client.post("/api/session/practice", headers=headers)).json()
+    assert practice["kind"] == "practice"
+
+    # The graduated card is somewhere in the sitting, not necessarily first: other cards are on
+    # their learning steps and are due too.
+    async with sessionmaker() as s:
+        rows = list(
+            await s.scalars(
+                select(SessionStep).where(SessionStep.session_id == uuid.UUID(practice["id"])).order_by(SessionStep.idx)
+            )
+        )
+        graduated = [r for r in rows if r.payload.get("mode") == "self"]
+        assert graduated, [r.payload.get("mode") for r in rows]
+        self_step = {
+            "id": str(graduated[0].id),
+            "cyrillic": graduated[0].payload["cyrillic"],
+            "choices": graduated[0].payload.get("choices", []),
+        }
+
+    assert self_step["choices"] == [], "free recall must not ship the answer in the payload"
+
+    revealed = await client.post(f"/api/session/steps/{self_step['id']}/reveal", headers=headers)
+    assert revealed.status_code == 200
+    assert revealed.json()["answer"] == self_step["cyrillic"]
+
+    # Revealing must not close the step.
+    graded = await client.post(
+        f"/api/session/steps/{self_step['id']}/answer", json={"self_grade": "knew"}, headers=headers
+    )
+    assert graded.status_code == 200
+    body = graded.json()
+    assert body["accepted"] and body["correct"]
+
+
+async def test_revealing_someone_elses_step_is_not_found(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    mine = await _auth(client, await _learner(sessionmaker))
+    theirs = await _auth(client, await _learner(sessionmaker, with_kana=False))
+    step = (await client.post("/api/session/today", headers=mine)).json()["current"]
+
+    resp = await client.post(f"/api/session/steps/{step['id']}/reveal", headers=theirs)
+    assert resp.status_code == 404

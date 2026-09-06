@@ -22,3 +22,5 @@
 .correct { margin: 16px 0 0; text-align: center; color: #43a047; }
 .wrong { margin: 16px 0 0; text-align: center; color: #e5533d; }
 .done { margin: 0 0 8px; }
+
+.grades { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }

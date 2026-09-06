@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser
-from app.api.schemas import AnswerIn, AnswerOut, SessionOut, SessionStepOut
+from app.api.schemas import AnswerIn, AnswerOut, RevealOut, SessionOut, SessionStepOut
 from app.db.base import SessionDep
 from app.db.models.learning import LearningSession, SessionClient, SessionKind, SessionStep
 from app.db.models.users import User
@@ -84,16 +84,33 @@ async def _begin(user: User, session: AsyncSession, *, want: SessionKind | None)
     return _session_out(learning, current)
 
 
-@router.post("/steps/{step_id}/answer", response_model=AnswerOut)
-async def answer_step(step_id: uuid.UUID, body: AnswerIn, user: CurrentUser, session: SessionDep) -> AnswerOut:
-    now = dt.datetime.now(dt.UTC)
+@router.post("/steps/{step_id}/reveal", response_model=RevealOut)
+async def reveal_step(step_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> RevealOut:
+    """Uncover the answer on a self-graded step without answering it.
+
+    Recording the moment matters: the plan infers Hard from how long the learner took to give up,
+    and by the time they pick a grade they are reading the answer rather than recalling it.
+    """
+    step, _ = await _owned_step(step_id, user, session)
+    answer = await session_service.reveal(session, step=step, now=dt.datetime.now(dt.UTC))
+    await session.commit()
+    return RevealOut(answer=answer)
+
+
+async def _owned_step(step_id: uuid.UUID, user: User, session: AsyncSession) -> tuple[SessionStep, LearningSession]:
     step = await session.get(SessionStep, step_id)
     if step is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="unknown step")
-
     learning = await session.get(LearningSession, step.session_id)
     if learning is None or learning.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="unknown step")
+    return step, learning
+
+
+@router.post("/steps/{step_id}/answer", response_model=AnswerOut)
+async def answer_step(step_id: uuid.UUID, body: AnswerIn, user: CurrentUser, session: SessionDep) -> AnswerOut:
+    now = dt.datetime.now(dt.UTC)
+    step, learning = await _owned_step(step_id, user, session)
 
     if body.acknowledged:
         outcome = await session_service.acknowledge(session, step=step, now=now)
