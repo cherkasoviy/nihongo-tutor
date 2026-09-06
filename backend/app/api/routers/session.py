@@ -85,7 +85,7 @@ async def answer_step(step_id: uuid.UUID, body: AnswerIn, user: CurrentUser, ses
     elif body.choice is not None:
         outcome = await session_service.submit_choice(session, user=user, step=step, choice=body.choice, now=now)
     else:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="no answer supplied")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="no answer supplied")
 
     nxt = await session_service.next_step(session, learning_session_id=learning.id)
     finished = nxt is None

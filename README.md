@@ -79,9 +79,12 @@ make check          # everything CI runs
 ```
 
 Integration tests use `TEST_DATABASE_URL` when set (any reachable Postgres), otherwise start a
-`postgres:16-alpine` testcontainer, otherwise skip. `make db-up` and
-`TEST_DATABASE_URL=postgresql+asyncpg://nihongo:nihongo@localhost:5432/nihongo make test` is the
-fastest loop.
+`postgres:16-alpine` testcontainer, otherwise skip. `make db-up` creates a second database,
+`nihongo_test`, and `make test` targets it by default — that is the fastest loop.
+
+**Never point `TEST_DATABASE_URL` at the `nihongo` development database.** The fixtures `TRUNCATE`
+between tests, so a test run would silently wipe your seeded kana and your own learner row, quite
+possibly while you are in the middle of a session.
 
 Test coverage: initData HMAC (valid / expired / tampered / wrong token), JWT issue and verify,
 webhook secret-token check, concurrent redemption of a `max_uses=1` invite (`SELECT ... FOR UPDATE`),
