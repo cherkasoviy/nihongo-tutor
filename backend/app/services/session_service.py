@@ -328,6 +328,29 @@ async def _open_session(session: AsyncSession, *, user_id: uuid.UUID, local_date
     return (await session.scalars(stmt)).first()
 
 
+async def in_progress_session(
+    session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date
+) -> LearningSession | None:
+    """The sitting the learner is in the middle of, or ``None``.
+
+    Separate from :func:`start_or_resume` on purpose. Anything that acts on "the current session"
+    without the learner asking to *start* one — stopping it, above all — must be able to find
+    nothing and do nothing. Telegram keeps old inline keyboards alive indefinitely, so a Stop
+    button can be tapped twice, or days later, and neither may bring a lesson into being.
+    """
+    stmt = (
+        select(LearningSession)
+        .where(
+            LearningSession.user_id == user_id,
+            LearningSession.local_date == local_date,
+            LearningSession.outcome == SessionOutcome.in_progress,
+        )
+        .order_by(LearningSession.started_at.desc())
+        .limit(1)
+    )
+    return (await session.scalars(stmt)).first()
+
+
 async def sessions_today(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> list[LearningSession]:
     stmt = (
         select(LearningSession)

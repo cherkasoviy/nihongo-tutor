@@ -25,6 +25,7 @@ from app.bot.handlers.start import identity_from_message
 from app.bot.keyboards import stop_keyboard
 from app.db.models.learning import DailyPlan, LearningSession, SessionKind, SessionStep, StepStatus, Streak
 from app.db.models.users import User, UserStatus
+from app.domain import clock
 from app.domain.grading import SelfGrade
 from app.logging import get_logger
 from app.services import session_service, user_service
@@ -267,7 +268,14 @@ async def on_stop(
             await query.answer()
             return
         now = dt.datetime.now(dt.UTC)
-        learning, _ = await session_service.start_or_resume(session, user=user, now=now)
+        learning = await session_service.in_progress_session(
+            session, user_id=user.id, local_date=clock.local_date(now, user.timezone)
+        )
+        if learning is None:
+            # Nothing running: an old keyboard, or a second tap. Starting a lesson here would
+            # introduce the next batch of syllables and bin them in the same breath.
+            await query.answer(texts_ru.SESSION_ALREADY_STOPPED)
+            return
         await session_service.finish(session, user=user, learning=learning, now=now, abandoned=True)
         await session.commit()
     await query.answer()

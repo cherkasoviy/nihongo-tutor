@@ -177,3 +177,68 @@ async def test_a_whole_session_can_be_played_to_the_summary(
     async with sessionmaker() as s:
         learning = (await s.scalars(select(LearningSession).where(LearningSession.user_id == user.id))).one()
         assert learning.completed_steps == learning.planned_steps
+
+
+# --- the stop button --------------------------------------------------------
+# Telegram keeps old inline keyboards live forever, so a Stop button can be tapped twice in a row,
+# or days after the session it belonged to. Neither may cost the learner anything.
+
+
+async def _remaining_new(sessionmaker: async_sessionmaker[AsyncSession], user_id: object) -> int:
+    from app.services import card_service
+    from app.services.session_service import KANA_STAGES
+
+    async with sessionmaker() as s:
+        return await card_service.remaining_new_count(s, user_id=user_id, stages=KANA_STAGES)
+
+
+async def _card_count(sessionmaker: async_sessionmaker[AsyncSession], user_id: object) -> int:
+    from app.db.models.learning import Card
+
+    async with sessionmaker() as s:
+        stmt = select(func.count()).select_from(Card).where(Card.user_id == user_id)
+        return int((await s.execute(stmt)).scalar_one())
+
+
+async def test_tapping_stop_twice_does_not_consume_more_syllables(
+    dp: Dispatcher, bot: MockedBot, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    """A second Stop must be a no-op, not a fresh lesson that is opened and binned in one breath."""
+    from app.bot.callbacks import SessionAction
+
+    tg_id, user = await _learner(sessionmaker)
+    await dp.feed_update(bot, command_update(tg_id, "/today"))
+
+    stop = SessionAction(action="stop").pack()
+    await dp.feed_update(bot, callback_update(tg_id, stop))
+    after_first = (await _remaining_new(sessionmaker, user.id), await _card_count(sessionmaker, user.id))
+
+    await dp.feed_update(bot, callback_update(tg_id, stop))
+    await dp.feed_update(bot, callback_update(tg_id, stop))
+
+    assert (await _remaining_new(sessionmaker, user.id), await _card_count(sessionmaker, user.id)) == after_first
+
+
+async def test_stop_with_nothing_in_progress_creates_no_session(
+    dp: Dispatcher, bot: MockedBot, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    """A Stop button from a previous day is still live in the learner's chat history."""
+    from app.bot.callbacks import SessionAction
+    from app.db.models.learning import LearningSession
+
+    tg_id, user = await _learner(sessionmaker)
+    before_new = await _remaining_new(sessionmaker, user.id)
+
+    await dp.feed_update(bot, callback_update(tg_id, SessionAction(action="stop").pack()))
+
+    async with sessionmaker() as s:
+        sessions = int(
+            (
+                await s.execute(
+                    select(func.count()).select_from(LearningSession).where(LearningSession.user_id == user.id)
+                )
+            ).scalar_one()
+        )
+    assert sessions == 0, "stopping nothing must not conjure a session to stop"
+    assert await _card_count(sessionmaker, user.id) == 0
+    assert await _remaining_new(sessionmaker, user.id) == before_new
