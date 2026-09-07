@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
@@ -142,7 +143,20 @@ class LearningSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "learning_sessions"
-    __table_args__ = (Index("ix_learning_sessions_user_date", "user_id", "local_date"),)
+    __table_args__ = (
+        Index("ix_learning_sessions_user_date", "user_id", "local_date"),
+        # "At most one planned lesson per learner-day", enforced rather than merely intended.
+        # The day's new-item dose is a deliberate decision; a second daily session would issue it
+        # twice. A bug in the stop handler did exactly that, and only the absence of this index
+        # let it through — practice sittings are unlimited by design and stay outside the index.
+        Index(
+            "uq_learning_sessions_daily_per_day",
+            "user_id",
+            "local_date",
+            unique=True,
+            postgresql_where=text("kind = 'daily'"),
+        ),
+    )
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     local_date: Mapped[dt.date] = mapped_column(Date, nullable=False)

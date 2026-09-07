@@ -13,6 +13,7 @@ import datetime as dt
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.content_pipeline.import_kana import import_kana
@@ -195,3 +196,51 @@ async def test_an_ungraded_card_never_disappears_from_the_curriculum(
 
     assert remaining == total, "nothing was taught, so nothing should have left the queue"
     assert offered, "the untaught items must still be offerable"
+
+
+async def test_the_database_refuses_a_second_planned_lesson_for_one_day(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The invariant is enforced, not merely intended.
+
+    The stop-button defect issued the day's new items twice, and nothing in the schema objected.
+    A partial unique index now makes that unrepresentable, so the next bug in this area fails loudly
+    instead of quietly consuming curriculum. Practice sittings are unlimited by design and stay
+    outside the index.
+    """
+    now = dt.datetime(2026, 4, 1, 9, 0, tzinfo=dt.UTC)
+    user = await _learner(sessionmaker, now=now)
+
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        first, _ = await session_service.start_or_resume(s, user=learner, now=now)
+        await s.commit()
+        local_date = first.local_date
+
+    with pytest.raises(IntegrityError):
+        async with sessionmaker() as s:
+            s.add(
+                LearningSession(
+                    user_id=user.id,
+                    local_date=local_date,
+                    started_at=now,
+                    kind=SessionKind.daily,
+                    planned_steps=0,
+                )
+            )
+            await s.commit()
+
+    # Two practice sittings on the same day are fine, and must stay fine.
+    async with sessionmaker() as s:
+        for _ in range(2):
+            s.add(
+                LearningSession(
+                    user_id=user.id,
+                    local_date=local_date,
+                    started_at=now,
+                    kind=SessionKind.practice,
+                    planned_steps=0,
+                )
+            )
+        await s.commit()
