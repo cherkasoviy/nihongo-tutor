@@ -29,11 +29,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.content import Item, ItemType
-from app.db.models.learning import Card, CardState, ReviewLog
+from app.db.models.learning import Card, CardDirection, CardState, ReviewLog
 from app.domain import srs
 from app.logging import get_logger
 from app.services.card_service import KANA_DIRECTIONS
@@ -171,14 +171,18 @@ async def unmark_known(
 
 
 async def claimed_but_unverified(session: AsyncSession, *, user_id: uuid.UUID) -> int:
-    """Cards the learner asserted and the scheduler has not checked yet.
+    """Syllables the learner asserted and the scheduler has not checked yet.
+
+    Counted in *syllables*, on the recognition card, so it sits directly beside the "known" figure
+    rather than reading twice as large because each syllable carries two cards.
 
     Kept separate from "known" in the stats: showing 90% mastery on day one because someone ticked
     a box would be the app flattering them with a number it has not earned.
     """
-    stmt = select(Card.id).where(
+    stmt = select(func.count(func.distinct(Card.item_id))).where(
         Card.user_id == user_id,
+        Card.direction == CardDirection.recognition,
         Card.state != CardState.new,
         ~select(ReviewLog.id).where(ReviewLog.card_id == Card.id).exists(),
     )
-    return len(list(await session.scalars(stmt)))
+    return int((await session.execute(stmt)).scalar_one())

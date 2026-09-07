@@ -191,7 +191,7 @@ async def test_stats_separate_what_was_claimed_from_what_was_proven(
         stats = await stats_service.learner_stats(s, user_id=user.id, now=NOW)
 
     assert stats.kana_known == 0, "nothing is proven until the learner answers something"
-    assert stats.kana_claimed == 92 * 2
+    assert stats.kana_claimed == 92, "counted in syllables, so it is comparable with kana_known"
     assert stats.kana_introduced == 92
 
 

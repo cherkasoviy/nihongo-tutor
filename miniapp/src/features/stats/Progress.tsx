@@ -8,6 +8,8 @@ export function Progress() {
   if (isLoading) return <p className="hint">Считаем прогресс…</p>;
   if (isError || !data) return <p className="hint">Не удалось загрузить прогресс.</p>;
 
+  // Verified only: a syllable someone ticked a box for has not been proven yet, and a headline
+  // number that counted it would be the app flattering them.
   const pct = data.kana_total > 0 ? Math.round((data.kana_known / data.kana_total) * 100) : 0;
 
   return (
@@ -15,8 +17,13 @@ export function Progress() {
       <div className={styles.hero}>
         <p className={styles.big}>{pct}%</p>
         <p className="hint">
-          каны выучено — {data.kana_known} из {data.kana_total}
+          каны проверено — {data.kana_known} из {data.kana_total}
         </p>
+        {data.kana_claimed > 0 && (
+          <p className="hint">
+            ещё {data.kana_claimed} отмечено как знакомые — спрошу их в ближайшие дни
+          </p>
+        )}
       </div>
       <dl className={styles.facts}>
         <dt>Серия</dt>

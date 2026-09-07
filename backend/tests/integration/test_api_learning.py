@@ -424,3 +424,78 @@ async def test_a_chosen_pace_changes_how_much_the_lesson_teaches(
             ).scalar_one()
         )
     assert intros == 3, f"asked for 3 new syllables, lesson introduced {intros}"
+
+
+# --- placement over HTTP ----------------------------------------------------
+
+
+async def test_claiming_syllables_over_the_api_takes_them_out_of_teaching(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    headers = await _auth(client, await _learner(sessionmaker))
+    cells = (await client.get("/api/content/kana?script=hiragana", headers=headers)).json()
+    basic = [c["item_id"] for c in cells if c["kind"] == "basic"]
+    assert len(basic) == 46
+
+    resp = await client.post("/api/content/kana/known", json={"item_ids": basic, "known": True}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["seeded"] == 46 * 2
+
+    after = (await client.get("/api/content/kana?script=hiragana", headers=headers)).json()
+    claimed = [c for c in after if c["kind"] == "basic"]
+    assert all(c["introduced"] for c in claimed)
+    assert all(c["state"] == "review" for c in claimed)
+
+    stats = (await client.get("/api/stats", headers=headers)).json()
+    assert stats["kana_claimed"] == 46
+    assert stats["kana_known"] == 0, "claimed is not the same as proven"
+
+
+async def test_a_claim_can_be_taken_back_over_the_api(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    headers = await _auth(client, await _learner(sessionmaker))
+    cells = (await client.get("/api/content/kana?script=katakana", headers=headers)).json()
+    ids = [c["item_id"] for c in cells[:6]]
+
+    await client.post("/api/content/kana/known", json={"item_ids": ids, "known": True}, headers=headers)
+    undo = await client.post("/api/content/kana/known", json={"item_ids": ids, "known": False}, headers=headers)
+    assert undo.status_code == 200
+    assert undo.json()["cleared"] == 6 * 2
+
+    after = (await client.get("/api/content/kana?script=katakana", headers=headers)).json()
+    assert not any(c["introduced"] for c in after[:6])
+
+
+async def test_claiming_a_lesson_makes_it_teach_something_else(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    """The point of the feature: the lesson moves past what the learner already reads."""
+    headers = await _auth(client, await _learner(sessionmaker))
+    cells = (await client.get("/api/content/kana", headers=headers)).json()
+    first_twenty = [c["item_id"] for c in cells[:20]]
+    chars = {c["char"] for c in cells[:20]}
+
+    await client.post("/api/content/kana/known", json={"item_ids": first_twenty, "known": True}, headers=headers)
+    session = (await client.post("/api/session/today", headers=headers)).json()
+
+    async with sessionmaker() as s:
+        intro_chars = {
+            str(step.payload["char"])
+            for step in await s.scalars(
+                select(SessionStep).where(
+                    SessionStep.session_id == uuid.UUID(session["id"]),
+                    SessionStep.kind == StepKind.intro_item,
+                )
+            )
+        }
+    assert intro_chars, "the lesson must still teach something"
+    assert not (intro_chars & chars), "it must not re-teach what was claimed"
+
+
+async def test_an_empty_claim_is_rejected(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    headers = await _auth(client, await _learner(sessionmaker, with_kana=False))
+    resp = await client.post("/api/content/kana/known", json={"item_ids": []}, headers=headers)
+    assert resp.status_code == 422
