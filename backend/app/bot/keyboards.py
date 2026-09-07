@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from app.bot import texts_ru
-from app.bot.callbacks import SessionAction, StepAck, StepChoice, StepReveal, StepSelfGrade
+from app.bot.callbacks import SessionAction, SetReminder, StepAck, StepChoice, StepReveal, StepSelfGrade
 
 
 def open_app_keyboard(miniapp_url: str, start_param: str | None = None) -> InlineKeyboardMarkup | None:
@@ -71,3 +71,21 @@ def stop_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=texts_ru.BUTTON_STOP, callback_data=SessionAction(action="stop").pack())]
         ]
     )
+
+
+# Evening-weighted: the plan's session is 15-20 minutes of focused recall, which most people do
+# after work rather than before it. Every option is the learner's own local time.
+REMINDER_HOURS = (8, 12, 18, 20, 21, 22)
+
+
+def reminder_keyboard(*, include_off: bool = True) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(text=f"{h:02d}:00", callback_data=SetReminder(hour=h).pack())
+            for h in REMINDER_HOURS[i : i + 3]
+        ]
+        for i in range(0, len(REMINDER_HOURS), 3)
+    ]
+    if include_off:
+        rows.append([InlineKeyboardButton(text=texts_ru.BUTTON_NO_REMINDER, callback_data=SetReminder(hour=-1).pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)

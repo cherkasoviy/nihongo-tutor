@@ -112,7 +112,7 @@ export interface SessionStep {
   idx: number;
   kind: StepKind;
   status: 'pending' | 'shown' | 'answered' | 'skipped';
-  mode: 'choice' | 'ack';
+  mode: 'choice' | 'ack' | 'self';
   prompt: string | null;
   char: string | null;
   cyrillic: string | null;
@@ -122,11 +122,16 @@ export interface SessionStep {
   choices: string[];
 }
 
+export interface RevealResult {
+  answer: string;
+}
+
 export interface SessionState {
   id: string;
   local_date: string;
   planned_steps: number;
   completed_steps: number;
+  kind: 'daily' | 'practice';
   outcome: 'in_progress' | 'completed' | 'abandoned';
   current: SessionStep | null;
 }

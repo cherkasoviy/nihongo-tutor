@@ -6,22 +6,25 @@ import { AdminInvites } from '@/features/admin/AdminInvites';
 import { KanaGrid } from '@/features/kana/KanaGrid';
 import { SessionRunner } from '@/features/session/SessionRunner';
 import { Screen } from '@/features/shell/Screen';
+import { Settings } from '@/features/settings/Settings';
 import { Progress } from '@/features/stats/Progress';
 import { getStartParam } from '@/tg/init';
 import { login } from '@/tg/auth';
 import { useAuthStore } from '@/store/auth';
 
-type Tab = 'today' | 'kana' | 'progress' | 'admin';
+type Tab = 'today' | 'kana' | 'progress' | 'settings' | 'admin';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'today', label: 'Сегодня' },
   { id: 'kana', label: 'Кана' },
   { id: 'progress', label: 'Прогресс' },
+  { id: 'settings', label: 'Настройки' },
 ];
 
 function initialTab(): Tab {
   const param = getStartParam();
-  if (param === 'admin' || param === 'kana' || param === 'progress' || param === 'today') return param;
+  if (param === 'admin' || param === 'kana' || param === 'progress' || param === 'settings' || param === 'today')
+    return param;
   return 'today';
 }
 
@@ -67,6 +70,7 @@ export function App() {
       {tab === 'today' && <SessionRunner />}
       {tab === 'kana' && <KanaGrid />}
       {tab === 'progress' && <Progress />}
+      {tab === 'settings' && <Settings user={me.data ?? user} />}
       {tab === 'admin' && isAdmin && <AdminInvites />}
     </Screen>
   );

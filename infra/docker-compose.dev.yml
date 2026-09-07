@@ -13,6 +13,8 @@ services:
       POSTGRES_DB: nihongo
     volumes:
       - pgdata_dev:/var/lib/postgresql/data
+      # Creates nihongo_test on first boot so the test suite never truncates your dev data.
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nihongo -d nihongo"]
       interval: 5s

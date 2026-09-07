@@ -37,7 +37,11 @@ async def test_start_with_invite_registers_learner(
     tg_id = fresh_tg_id()
     await dp.feed_update(bot, command_update(tg_id, f"/start {code}", first_name="Аня"))
     texts = bot.sent_texts()
-    assert len(texts) == 1 and texts[0].startswith("Привет, Аня!")
+    # Welcome, then the reminder question: without an answer to that the cron has nothing to
+    # select and the daily nudge — the whole reason this lives in a chat app — never fires.
+    assert len(texts) == 2
+    assert texts[0].startswith("Привет, Аня!")
+    assert texts[1].startswith("Когда напоминать")
     # The Mini App button rides along because MINIAPP_URL is https in tests.
     request = bot.mocked.get_request()
     assert request.reply_markup is not None  # type: ignore[attr-defined]
@@ -57,7 +61,8 @@ async def test_admin_bootstrap_from_env(
     dp: Dispatcher, bot: MockedBot, sessionmaker: async_sessionmaker[AsyncSession]
 ) -> None:
     await dp.feed_update(bot, command_update(ADMIN_TG_ID, "/start", first_name="Игорь", username="igor"))
-    assert bot.sent_texts() == [texts_ru.WELCOME_ADMIN.format(name="Игорь")]
+    assert bot.sent_texts()[0] == texts_ru.WELCOME_ADMIN.format(name="Игорь")
+    assert bot.sent_texts()[1].startswith("Когда напоминать")
     async with sessionmaker() as s:
         user = await user_service.get_by_tg_id(s, ADMIN_TG_ID)
         assert user is not None and user.is_admin
@@ -105,3 +110,46 @@ async def test_learning_commands_require_registration(dp: Dispatcher, bot: Mocke
     for command in ("/today", "/stats", "/settings"):
         await dp.feed_update(bot, command_update(fresh_tg_id(), command))
         assert bot.sent_texts()[-1] == texts_ru.NOT_REGISTERED
+
+
+async def test_choosing_a_reminder_time_makes_the_cron_able_to_select_the_learner(
+    dp: Dispatcher, bot: MockedBot, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    """The gap this closes: reminder_time was NULL for everyone, so no reminder could ever fire."""
+    from app.bot.callbacks import SetReminder
+    from app.services import reminder_service
+    from tests.helpers.updates import callback_update
+
+    code = await _make_invite(sessionmaker)
+    tg_id = fresh_tg_id()
+    await dp.feed_update(bot, command_update(tg_id, f"/start {code}"))
+
+    async with sessionmaker() as s:
+        user = await user_service.get_by_tg_id(s, tg_id)
+        assert user is not None and user.reminder_time is None
+        assert await reminder_service.reminder_candidates(s) == []
+
+    await dp.feed_update(bot, callback_update(tg_id, SetReminder(hour=20).pack()))
+
+    async with sessionmaker() as s:
+        user = await user_service.get_by_tg_id(s, tg_id)
+        assert user is not None
+        assert user.reminder_time is not None and user.reminder_time.hour == 20
+        assert [u.id for u in await reminder_service.reminder_candidates(s)] == [user.id]
+
+
+async def test_a_learner_can_decline_reminders(
+    dp: Dispatcher, bot: MockedBot, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    from app.bot.callbacks import SetReminder
+    from tests.helpers.updates import callback_update
+
+    code = await _make_invite(sessionmaker)
+    tg_id = fresh_tg_id()
+    await dp.feed_update(bot, command_update(tg_id, f"/start {code}"))
+    await dp.feed_update(bot, callback_update(tg_id, SetReminder(hour=20).pack()))
+    await dp.feed_update(bot, callback_update(tg_id, SetReminder(hour=-1).pack()))
+
+    async with sessionmaker() as s:
+        user = await user_service.get_by_tg_id(s, tg_id)
+        assert user is not None and user.reminder_time is None

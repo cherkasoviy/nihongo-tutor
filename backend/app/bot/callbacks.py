@@ -42,3 +42,12 @@ class SessionAction(CallbackData, prefix="ss"):
     """Session-level controls that are not tied to a single step."""
 
     action: str
+
+
+class SetReminder(CallbackData, prefix="rm"):
+    """Choosing a daily reminder time during onboarding or from ``/settings``.
+
+    ``hour`` is the learner's local hour; ``-1`` means they would rather not be reminded.
+    """
+
+    hour: int

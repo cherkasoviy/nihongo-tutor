@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 
 from fastapi import APIRouter, HTTPException, status
@@ -19,7 +20,8 @@ router = APIRouter(tags=["stats"])
 @router.get("/stats", response_model=StatsOut)
 async def get_stats(user: CurrentUser, session: SessionDep) -> StatsOut:
     stats = await stats_service.learner_stats(session, user_id=user.id, now=dt.datetime.now(dt.UTC))
-    return StatsOut(**vars(stats))
+    # ``asdict``, not ``vars``: LearnerStats is a slotted dataclass and has no ``__dict__``.
+    return StatsOut(**dataclasses.asdict(stats))
 
 
 @router.patch("/settings", response_model=UserOut)
@@ -27,7 +29,7 @@ async def update_settings(body: SettingsIn, user: CurrentUser, session: SessionD
     if body.timezone is not None:
         # A bad IANA name would silently move every future reminder and local date to UTC.
         if clock.zone(body.timezone).key != body.timezone:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="unknown timezone")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="unknown timezone")
         user.timezone = body.timezone
     if body.clear_reminder:
         user.reminder_time = None

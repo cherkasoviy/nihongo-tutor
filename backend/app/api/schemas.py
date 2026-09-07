@@ -12,6 +12,11 @@ from app.db.models import Invite, User
 
 class TelegramAuthRequest(BaseModel):
     init_data: str = Field(min_length=1, description="Raw window.Telegram.WebApp.initData string")
+    timezone: str | None = Field(
+        default=None,
+        max_length=64,
+        description="IANA zone the browser reports; adopted only while the learner is on the default",
+    )
 
 
 class UserOut(BaseModel):
@@ -116,6 +121,7 @@ class SessionStepOut(BaseModel):
 class SessionOut(BaseModel):
     id: uuid.UUID
     local_date: dt.date
+    kind: str = "daily"
     planned_steps: int
     completed_steps: int
     outcome: str
@@ -126,6 +132,10 @@ class AnswerIn(BaseModel):
     choice: int | None = Field(default=None, ge=0, le=15)
     self_grade: str | None = Field(default=None, pattern="^(forgot|knew|easy)$")
     acknowledged: bool = False
+
+
+class RevealOut(BaseModel):
+    answer: str
 
 
 class AnswerOut(BaseModel):

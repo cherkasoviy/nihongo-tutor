@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { AnswerResult, SessionStep } from '@/api/client';
-import { useAnswerStep, useStartSession } from '@/api/hooks';
+import { useAnswerStep, useRevealStep, useStartSession } from '@/api/hooks';
 
 import styles from './SessionRunner.module.css';
 
@@ -15,6 +15,8 @@ import styles from './SessionRunner.module.css';
 export function SessionRunner() {
   const start = useStartSession();
   const answer = useAnswerStep();
+  const reveal = useRevealStep();
+  const [revealed, setRevealed] = useState<string | null>(null);
   const [step, setStep] = useState<SessionStep | null>(null);
   const [feedback, setFeedback] = useState<AnswerResult | null>(null);
   const [finished, setFinished] = useState(false);
@@ -49,7 +51,7 @@ export function SessionRunner() {
 
   if (!step) return <p className="hint">Загружаем шаг…</p>;
 
-  const submit = (body: { choice?: number; acknowledged?: boolean }) => {
+  const submit = (body: { choice?: number; acknowledged?: boolean; self_grade?: string }) => {
     if (answer.isPending || feedback) return;
     answer.mutate(
       { stepId: step.id, body },
@@ -63,7 +65,8 @@ export function SessionRunner() {
             return;
           }
           setProgress((p) => ({ ...p, done: p.done + 1 }));
-          if (body.acknowledged) {
+          setRevealed(null);
+          if (body.acknowledged || body.self_grade) {
             setStep(result.next);
             setFinished(result.session_finished);
             return;
@@ -82,9 +85,16 @@ export function SessionRunner() {
   return (
     <section className={styles.card}>
       <Progress done={progress.done} total={progress.total} />
-      {step.mode === 'ack' ? (
-        <Intro step={step} onNext={() => submit({ acknowledged: true })} />
-      ) : (
+      {step.mode === 'ack' && <Intro step={step} onNext={() => submit({ acknowledged: true })} />}
+      {step.mode === 'self' && (
+        <SelfRecall
+          step={step}
+          revealed={revealed}
+          onReveal={() => reveal.mutate(step.id, { onSuccess: (r) => setRevealed(r.answer) })}
+          onGrade={(grade) => submit({ self_grade: grade })}
+        />
+      )}
+      {step.mode === 'choice' && (
         <Choice step={step} feedback={feedback} onPick={(i) => submit({ choice: i })} />
       )}
     </section>
@@ -115,6 +125,53 @@ function Intro({ step, onNext }: { step: SessionStep; onNext: () => void }) {
       <button type="button" className={styles.next} onClick={onNext}>
         Запомнила
       </button>
+    </>
+  );
+}
+
+const SELF_GRADES: { id: string; label: string }[] = [
+  { id: 'forgot', label: 'Не помню' },
+  { id: 'knew', label: 'Помню' },
+  { id: 'easy', label: 'Легко' },
+];
+
+/**
+ * Free recall: the glyph alone, then the learner's own verdict.
+ *
+ * Deliberately shows no options before the reveal — seeing them would turn the strongest test in
+ * the session back into multiple choice.
+ */
+function SelfRecall({
+  step,
+  revealed,
+  onReveal,
+  onGrade,
+}: {
+  step: SessionStep;
+  revealed: string | null;
+  onReveal: () => void;
+  onGrade: (grade: string) => void;
+}) {
+  return (
+    <>
+      <p className={styles.question}>Как читается?</p>
+      <p className={styles.bigChar}>{step.char}</p>
+      {revealed === null ? (
+        <button type="button" className={styles.next} onClick={onReveal}>
+          Показать ответ
+        </button>
+      ) : (
+        <>
+          <p className={styles.reading}>{revealed}</p>
+          <div className={styles.grades}>
+            {SELF_GRADES.map((g) => (
+              <button key={g.id} type="button" className={styles.choice} onClick={() => onGrade(g.id)}>
+                {g.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </>
   );
 }

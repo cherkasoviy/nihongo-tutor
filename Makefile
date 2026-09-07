@@ -43,8 +43,12 @@ miniapp: ## Run the Vite dev server on :5173
 	cd $(MINIAPP) && npm run dev
 
 # --- quality -----------------------------------------------------------------
-test: ## Run the full backend test suite (needs Postgres: TEST_DATABASE_URL or Docker)
-	$(UV) pytest -q
+# Defaults to the dedicated test database `make db-up` creates. Never point this at the dev
+# database: the fixtures truncate between tests and would wipe your seeded content mid-session.
+TEST_DB ?= postgresql+asyncpg://nihongo:nihongo@localhost:5432/nihongo_test
+
+test: ## Run the full backend test suite against the local nihongo_test database
+	cd $(BACKEND) && TEST_DATABASE_URL=$(TEST_DB) uv run pytest -q
 
 test-unit: ## Run only tests that need no database
 	$(UV) pytest -q -m "not integration"

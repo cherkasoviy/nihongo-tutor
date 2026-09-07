@@ -9,6 +9,7 @@ were already in flight.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 
 from aiogram import F, Router
@@ -19,11 +20,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot import render, texts_ru
-from app.bot.callbacks import SessionAction, StepAck, StepChoice, StepSelfGrade
+from app.bot.callbacks import SessionAction, StepAck, StepChoice, StepReveal, StepSelfGrade
 from app.bot.handlers.start import identity_from_message
-from app.config import Settings
-from app.db.models.learning import DailyPlan, LearningSession, SessionStep, StepStatus, Streak
+from app.bot.keyboards import stop_keyboard
+from app.db.models.learning import DailyPlan, LearningSession, SessionKind, SessionStep, StepStatus, Streak
 from app.db.models.users import User, UserStatus
+from app.domain import clock
 from app.domain.grading import SelfGrade
 from app.logging import get_logger
 from app.services import session_service, user_service
@@ -50,8 +52,30 @@ async def _send_next(message: Message, session: AsyncSession, learning: Learning
 @router.message(Command("today"))
 async def cmd_today(
     message: Message,
-    settings: Settings,
     sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The day's lesson — or, once that is done, an extra practice sitting."""
+    await _start(message, sessionmaker, want=None)
+
+
+@router.message(Command("review"))
+async def cmd_review(
+    message: Message,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The plan's short repetition: five minutes of reviews, never new items.
+
+    Asked for explicitly, so it starts a practice sitting even before today's lesson is done — and
+    it cannot earn the day, because that is the lesson's job.
+    """
+    await _start(message, sessionmaker, want=SessionKind.practice)
+
+
+async def _start(
+    message: Message,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    want: SessionKind | None,
 ) -> None:
     identity = identity_from_message(message)
     if identity is None:
@@ -67,39 +91,35 @@ async def cmd_today(
             await message.answer(texts_ru.ALREADY_PAUSED)
             return
 
-        learning, created = await session_service.start_or_resume(session, user=user, now=now)
+        learning, created = await session_service.start_or_resume(session, user=user, now=now, want=want)
         await session.commit()
 
+        practice = learning.kind is SessionKind.practice
         if learning.planned_steps == 0:
-            await message.answer(texts_ru.TODAY_NOTHING_DUE)
-            return
-        remaining = learning.planned_steps - learning.completed_steps
-        if remaining <= 0:
-            await message.answer(texts_ru.TODAY_ALREADY_DONE.format(streak=await _streak_of(session, user)))
+            streak = await _streak_of(session, user)
+            await message.answer(
+                texts_ru.PRACTICE_NOTHING_DUE.format(streak=streak, streak_word=texts_ru.streak_word(streak))
+                if practice
+                else texts_ru.TODAY_NOTHING_DUE
+            )
             return
 
-        if created:
+        remaining = learning.planned_steps - learning.completed_steps
+        if created and practice:
+            opener = texts_ru.PRACTICE_INTRO.format(steps=learning.planned_steps)
+        elif created:
             minutes = max(1, round(learning.planned_steps * 8 / 60))
-            await message.answer(texts_ru.TODAY_INTRO.format(steps=learning.planned_steps, minutes=minutes))
+            opener = texts_ru.TODAY_INTRO.format(steps=learning.planned_steps, minutes=minutes)
         else:
-            await message.answer(texts_ru.TODAY_RESUME.format(left=remaining, total=learning.planned_steps))
+            template = texts_ru.PRACTICE_RESUME if practice else texts_ru.TODAY_RESUME
+            opener = template.format(left=remaining, total=learning.planned_steps)
+        # The way out lives on the opening message rather than on every step: a session the learner
+        # cannot stop is a session they will abandon by closing the app, which looks the same to the
+        # scheduler but loses the progress they had earned.
+        await message.answer(opener, reply_markup=stop_keyboard())
+
         await _send_next(message, session, learning)
         await session.commit()
-
-
-@router.message(Command("review"))
-async def cmd_review(
-    message: Message,
-    settings: Settings,
-    sessionmaker: async_sessionmaker[AsyncSession],
-) -> None:
-    """A short top-up between lessons.
-
-    Phase 1 serves it from today's session, so a learner who taps /review after finishing simply
-    sees that there is nothing left. The plan's dedicated five-minute review queue needs the vocab
-    stage's much larger due pool to be worth building, so it arrives with Phase 2.
-    """
-    await cmd_today(message, settings=settings, sessionmaker=sessionmaker)
 
 
 async def _streak_of(session: AsyncSession, user: User) -> int:
@@ -165,13 +185,17 @@ async def _summary(session: AsyncSession, *, user: User, learning: LearningSessi
             )
         ).scalar_one()
     )
+    accuracy = round(100 * correct / graded) if graded else 100
+    if learning.kind is SessionKind.practice:
+        return texts_ru.PRACTICE_DONE.format(reviews=learning.completed_steps, accuracy=accuracy)
+
     plan = await session.get(DailyPlan, (user.id, learning.local_date))
     streak = await _streak_of(session, user) if counted else 0
 
     return texts_ru.SESSION_DONE.format(
         new_items=plan.new_items_target if plan else 0,
         reviews=learning.completed_steps,
-        accuracy=round(100 * correct / graded) if graded else 100,
+        accuracy=accuracy,
         streak=streak,
         streak_word=texts_ru.streak_word(streak),
         tomorrow=texts_ru.SESSION_DONE_TOMORROW_EMPTY,
@@ -244,9 +268,42 @@ async def on_stop(
             await query.answer()
             return
         now = dt.datetime.now(dt.UTC)
-        learning, _ = await session_service.start_or_resume(session, user=user, now=now)
+        learning = await session_service.in_progress_session(
+            session, user_id=user.id, local_date=clock.local_date(now, user.timezone)
+        )
+        if learning is None:
+            # Nothing running: an old keyboard, or a second tap. Starting a lesson here would
+            # introduce the next batch of syllables and bin them in the same breath.
+            await query.answer(texts_ru.SESSION_ALREADY_STOPPED)
+            return
         await session_service.finish(session, user=user, learning=learning, now=now, abandoned=True)
         await session.commit()
     await query.answer()
     if isinstance(query.message, Message):
         await query.message.answer(texts_ru.SESSION_STOPPED)
+
+
+@router.callback_query(StepReveal.filter())
+async def on_reveal(
+    query: CallbackQuery,
+    callback_data: StepReveal,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Show the answer on a self-graded step, then offer the three grades.
+
+    The step stays open: revealing is not answering. The time taken to get here is what decides
+    Hard, so it is recorded now rather than when the learner finally picks a button.
+    """
+    async with sessionmaker() as session:
+        step = await session.get(SessionStep, callback_data.step_id)
+        if step is None or step.status not in (StepStatus.pending, StepStatus.shown):
+            await query.answer(texts_ru.SESSION_STEP_GONE)
+            return
+        await session_service.reveal(session, step=step, now=dt.datetime.now(dt.UTC))
+        await session.commit()
+        view = render.render_revealed(step)
+
+    await query.answer()
+    if isinstance(query.message, Message):
+        with contextlib.suppress(TelegramBadRequest):
+            await query.message.edit_text(view.text, reply_markup=view.keyboard)

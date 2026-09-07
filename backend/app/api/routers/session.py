@@ -11,11 +11,13 @@ import datetime as dt
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser
-from app.api.schemas import AnswerIn, AnswerOut, SessionOut, SessionStepOut
+from app.api.schemas import AnswerIn, AnswerOut, RevealOut, SessionOut, SessionStepOut
 from app.db.base import SessionDep
-from app.db.models.learning import LearningSession, SessionClient, SessionStep
+from app.db.models.learning import LearningSession, SessionClient, SessionKind, SessionStep
+from app.db.models.users import User
 from app.domain.grading import SelfGrade
 from app.services import session_service
 
@@ -46,6 +48,7 @@ def _session_out(learning: LearningSession, current: SessionStep | None) -> Sess
     return SessionOut(
         id=learning.id,
         local_date=learning.local_date,
+        kind=learning.kind.value,
         planned_steps=learning.planned_steps,
         completed_steps=learning.completed_steps,
         outcome=learning.outcome.value,
@@ -55,9 +58,25 @@ def _session_out(learning: LearningSession, current: SessionStep | None) -> Sess
 
 @router.post("/today", response_model=SessionOut)
 async def start_today(user: CurrentUser, session: SessionDep) -> SessionOut:
-    """Start or resume today's session. Idempotent: calling it twice returns the same session."""
+    """Start or resume the current sitting. Idempotent: calling it twice returns the same session.
+
+    Once the day's lesson is finished this hands back an extra *practice* sitting rather than
+    nothing, so a learner who wants to keep going is never told to come back tomorrow.
+    """
+    return await _begin(user, session, want=None)
+
+
+@router.post("/practice", response_model=SessionOut)
+async def start_practice(user: CurrentUser, session: SessionDep) -> SessionOut:
+    """Five minutes of reviews on demand. Never introduces new items and never earns the streak."""
+    return await _begin(user, session, want=SessionKind.practice)
+
+
+async def _begin(user: User, session: AsyncSession, *, want: SessionKind | None) -> SessionOut:
     now = dt.datetime.now(dt.UTC)
-    learning, _ = await session_service.start_or_resume(session, user=user, now=now, client=SessionClient.miniapp)
+    learning, _ = await session_service.start_or_resume(
+        session, user=user, now=now, client=SessionClient.miniapp, want=want
+    )
     current = await session_service.next_step(session, learning_session_id=learning.id)
     if current is not None:
         await session_service.mark_shown(session, step=current, now=now, message_id=None)
@@ -65,16 +84,33 @@ async def start_today(user: CurrentUser, session: SessionDep) -> SessionOut:
     return _session_out(learning, current)
 
 
-@router.post("/steps/{step_id}/answer", response_model=AnswerOut)
-async def answer_step(step_id: uuid.UUID, body: AnswerIn, user: CurrentUser, session: SessionDep) -> AnswerOut:
-    now = dt.datetime.now(dt.UTC)
+@router.post("/steps/{step_id}/reveal", response_model=RevealOut)
+async def reveal_step(step_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> RevealOut:
+    """Uncover the answer on a self-graded step without answering it.
+
+    Recording the moment matters: the plan infers Hard from how long the learner took to give up,
+    and by the time they pick a grade they are reading the answer rather than recalling it.
+    """
+    step, _ = await _owned_step(step_id, user, session)
+    answer = await session_service.reveal(session, step=step, now=dt.datetime.now(dt.UTC))
+    await session.commit()
+    return RevealOut(answer=answer)
+
+
+async def _owned_step(step_id: uuid.UUID, user: User, session: AsyncSession) -> tuple[SessionStep, LearningSession]:
     step = await session.get(SessionStep, step_id)
     if step is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="unknown step")
-
     learning = await session.get(LearningSession, step.session_id)
     if learning is None or learning.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="unknown step")
+    return step, learning
+
+
+@router.post("/steps/{step_id}/answer", response_model=AnswerOut)
+async def answer_step(step_id: uuid.UUID, body: AnswerIn, user: CurrentUser, session: SessionDep) -> AnswerOut:
+    now = dt.datetime.now(dt.UTC)
+    step, learning = await _owned_step(step_id, user, session)
 
     if body.acknowledged:
         outcome = await session_service.acknowledge(session, step=step, now=now)
@@ -85,7 +121,7 @@ async def answer_step(step_id: uuid.UUID, body: AnswerIn, user: CurrentUser, ses
     elif body.choice is not None:
         outcome = await session_service.submit_choice(session, user=user, step=step, choice=body.choice, now=now)
     else:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="no answer supplied")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="no answer supplied")
 
     nxt = await session_service.next_step(session, learning_session_id=learning.id)
     finished = nxt is None
