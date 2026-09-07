@@ -96,14 +96,17 @@ async def introduce_item(
 
 def _due_query(user_id: uuid.UUID, now: dt.datetime) -> Select[tuple[Card]]:
     return (
-        select(Card)
-        .where(
+        select(Card).where(
             Card.user_id == user_id,
             Card.suspended.is_(False),
             Card.due <= now,
             Card.state != CardState.new,
         )
-        .order_by(Card.due)
+        # `id` breaks the tie, and it has to: a day's cards are created in one transaction and share
+        # an identical `due`, so `ORDER BY due` alone leaves it to Postgres which of them a LIMIT
+        # returns. The plan promises that reopening a session replays it, and uuid7 is time-ordered,
+        # so this also means "oldest card first" rather than an arbitrary choice.
+        .order_by(Card.due, Card.id)
     )
 
 
@@ -187,7 +190,7 @@ async def weakest_cards(
     stmt = (
         select(Card)
         .where(Card.user_id == user_id, Card.suspended.is_(False), Card.state != CardState.new)
-        .order_by(Card.due)
+        .order_by(Card.due, Card.id)
         .limit(limit)
     )
     if exclude:

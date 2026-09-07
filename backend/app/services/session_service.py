@@ -336,7 +336,7 @@ async def _resumable_session(
             LearningSession.outcome.in_((SessionOutcome.in_progress, SessionOutcome.abandoned)),
             unanswered,
         )
-        .order_by(LearningSession.started_at.desc())
+        .order_by(LearningSession.started_at.desc(), LearningSession.id.desc())
         .limit(1)
     )
     return (await session.scalars(stmt)).first()
@@ -374,7 +374,7 @@ async def in_progress_session(
             LearningSession.local_date == local_date,
             LearningSession.outcome == SessionOutcome.in_progress,
         )
-        .order_by(LearningSession.started_at.desc())
+        .order_by(LearningSession.started_at.desc(), LearningSession.id.desc())
         .limit(1)
     )
     return (await session.scalars(stmt)).first()
@@ -577,7 +577,7 @@ async def _missed_days(session: AsyncSession, *, user_id: uuid.UUID, today: dt.d
     last = await session.scalar(
         select(LearningSession.local_date)
         .where(LearningSession.user_id == user_id, LearningSession.outcome == SessionOutcome.completed)
-        .order_by(LearningSession.local_date.desc())
+        .order_by(LearningSession.local_date.desc(), LearningSession.id.desc())
         .limit(1)
     )
     if last is None:

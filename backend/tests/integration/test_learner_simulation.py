@@ -106,12 +106,20 @@ async def _simulate(
     days: int = DAYS,
 ) -> Simulation:
     """Run ``days`` consecutive days, answering each step correctly with probability ``accuracy``."""
-    # Two independent sources of randomness have to be pinned, and only one of them is obvious.
-    # `rng` decides whether this simulated learner recalls a step. The other is inside FSRS: the
-    # scheduler fuzzes every interval, and py-fsrs draws that fuzz from the *global* `random`
-    # module, which nothing here was seeding. That is what made this file flake — intervals landed
-    # differently on each run, so whether the final day had anything due was luck, and CI passed on
-    # it. Seeding the module RNG makes the whole 30 days reproducible.
+    # `rng` decides whether this simulated learner recalls a step. Seeding the *module* RNG as well
+    # removes a second, less obvious source of variance: the scheduler fuzzes every interval and
+    # py-fsrs draws that fuzz from the global `random`, which nothing here was seeding.
+    #
+    # It does not make the run reproducible, and it is worth knowing why rather than assuming it
+    # does. The step order comes from `interleave.make_seed(user.id, local_date)`, and the learner's
+    # UUID is fresh on every run — deliberately, since each learner is meant to get their own
+    # ordering. Different order means different cards answered at different moments, which feeds
+    # back into the schedule, so the per-day step counts genuinely differ run to run.
+    #
+    # Which is why the assertions below are invariants rather than counts: the guarantees hold under
+    # any ordering, and pinning the incidentals would only buy a test that fails for the wrong
+    # reason. Verified by running this file repeatedly — streak, completed days and syllables taught
+    # come out identical every time while the minutes per day do not.
     random.seed(seed)
     rng = random.Random(seed)
     start = dt.datetime(2026, 4, 1, 9, 0, tzinfo=dt.UTC)
@@ -219,12 +227,12 @@ async def test_a_diligent_learner_keeps_the_streak_and_gets_through_the_syllabar
     but exact counts move with FSRS's interval arithmetic, and pinning them would buy a test that
     breaks on a library upgrade rather than on a regression.
 
-    Note what this test does *not* do: it does not guarantee an empty day happens. Once the RNG is
-    pinned, whether the last day has a review left is a property of the seed — a diligent learner
-    at this seed always has at least one card due. So the empty-day behaviour is pinned
-    deterministically in ``test_session_recovery.py`` instead, by a learner with no curriculum at
-    all, and what is asserted here is the invariant that holds either way: turning up every day is
-    a streak of every day. ``empty_days`` is carried only so a failure says which case it hit.
+    Note what this test does *not* do: it does not guarantee an empty day happens. Whether the last
+    day still has a review left depends on where the intervals fall, and a diligent learner usually
+    has one. So the empty-day behaviour is pinned deterministically in ``test_session_recovery.py``
+    instead, by a learner with no curriculum at all, and what is asserted here is the invariant that
+    holds either way: turning up every day is a streak of every day. ``empty_days`` is carried only
+    so a failure says which case it hit.
     """
     sim = await _simulate(sessionmaker, accuracy=1.0)
 
