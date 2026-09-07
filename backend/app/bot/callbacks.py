@@ -51,3 +51,9 @@ class SetReminder(CallbackData, prefix="rm"):
     """
 
     hour: int
+
+
+class SetPace(CallbackData, prefix="pc"):
+    """How many new syllables a day. ``0`` means "use the default for the stage"."""
+
+    count: int

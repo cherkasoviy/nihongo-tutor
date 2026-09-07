@@ -95,7 +95,7 @@ Backend deps: fastapi, uvicorn, sqlalchemy[asyncio], asyncpg, alembic, pydantic-
 ## Data model (Postgres, UUIDv7 keys, timestamptz, JSONB for payloads)
 
 **Users / access**
-- `users`: tg_user_id (unique), role (learner|admin), status, timezone (IANA), reminder_time, daily_minutes_target (17), furigana_mode, daily_budget_usd, desired_retention (0.90), fsrs_params jsonb null, invited_by, onboarded_at, last_active_at.
+- `users`: tg_user_id (unique), role (learner|admin), status, timezone (IANA), reminder_time, daily_minutes_target (17), daily_new_items_target (null = stage default), furigana_mode, daily_budget_usd, desired_retention (0.90), fsrs_params jsonb null, invited_by, onboarded_at, last_active_at.
 - `invites`: code (unique), created_by, max_uses, uses, expires_at, revoked. `invite_redemptions`: invite_id, user_id.
 
 **Content (shared)**
@@ -125,16 +125,24 @@ Backend deps: fastapi, uvicorn, sqlalchemy[asyncio], asyncpg, alembic, pydantic-
 
 **Adaptive new items per day**
 ```
-base = 5 kana/day in kana stage; 4 vocab + 1 grammar every 2nd day in core stage
+base = learner's chosen pace, else 10 kana/day in kana stage; 4 vocab + 1 grammar every 2nd day in core stage
 backlog_ratio = due_count / (0.35 * T / avg_review_s)
 if backlog_ratio > 1.5: new = 0
 elif backlog_ratio > 1.0: new = max(1, base // 3)
 else: new = base
 if retention_7d < 0.80: new = max(1, new - 2)
-if retention_7d > 0.92 and last 3 sessions finished under T: new = min(new + 1, 10)
+if retention_7d > 0.92 and last 3 sessions finished under T: new = min(new + 1, MAX_NEW_PER_DAY)
 if missed >= 3 days: new = min(new, 2) for the first session back
 ```
 Grammar points unlock only when prerequisites have a review-state card and ≥80% of the point's example lemmas are known.
+
+**Amended after measurement (was `base = 5`, ceiling `10`).** Five turned out to be vocabulary pacing applied to kana: a vocabulary item carries a meaning, a reading and a production form, whereas a kana is a shape and a sound. A 30-day simulation across bases 5/8/10/15/20 and three accuracy profiles showed base 5 leaving a learner who recalls 70% of what they see on **94 of 208 syllables after a month, with hiragana still unfinished** — and a diligent one at 177, never completing the syllabary. Ten reaches hiragana on day 11 and both scripts by day 21 with the longest session still under eleven minutes, and it matches this section's own budget: 25% of seventeen minutes at eight seconds a step is about ten introductions, not five. The ceiling moved to `MAX_NEW_PER_DAY` (20) for the same reason — left at 10 it would silently disable the high-retention bump once the base reached 10, making the reward for doing well nothing.
+
+The safety rail is the backlog gate, not a low base: the sweep shows it zeroing new items by itself once the due queue outgrows the warm-up. So the pace is the learner's to set (`users.daily_new_items_target`, `/pace`, or the Mini App), capped at `MAX_NEW_PER_DAY`, and it is only a *starting* number — every rule above still runs on top of it. The default stops at 10 rather than 20 on judgement, not evidence: the simulation takes accuracy as an input, so it cannot say whether real recall degrades against twenty confusable glyphs in one sitting.
+
+**Placement (not in the original plan).** A learner who already reads some kana can mark syllables known, by gojūon group or individually. A claim is *seeded, not skipped*: the card is written as the state the scheduler produces for two correct answers, with its due date pulled into a spread window, so every claim is tested within a couple of weeks — the ones that hold stretch out, the ones that do not fall into relearning. Self-report on kana is confident on the あ-row and mushy on ぢ/づ and りゃ/りゅ/りょ, so the scheduler verifies the claim rather than trusting it. `/stats` reports claimed and verified separately.
+
+**A day with nothing to do counts toward the streak.** Once everything available has been taught and nothing is due the session is empty; turning up to that is not failing it. Relevant well before Phase 2, since at this pace the syllabary finishes around day 21 and the rest of the month is such days.
 
 **Composition of one session (T = 17 min default)**: warm-up reviews ~35% (retrievability-sorted, rendered in sentence context or as cloze) → new items ~25% (intro with audio, furigana, gloss, pitch mark; immediate check; delayed cloze) → listening ~15% (2-4 audio-first steps, four distractors drawn algorithmically from known items) → one output task ~15% (kana stage: shadowing; core stage: alternate `speak` and `roleplay`, chat-only) → wrap-up ~10% (retest new items, summary, tomorrow preview). Blueprint stored in `daily_plans.plan`; steps materialized lazily so sentence choice reflects the latest known set. Seeded RNG (user_id + date) so reopening gives the same order.
 

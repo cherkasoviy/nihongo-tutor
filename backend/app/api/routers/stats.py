@@ -37,6 +37,10 @@ async def update_settings(body: SettingsIn, user: CurrentUser, session: SessionD
         user.reminder_time = body.reminder_time
     if body.daily_minutes_target is not None:
         user.daily_minutes_target = body.daily_minutes_target
+    if body.reset_new_items_target:
+        user.daily_new_items_target = None
+    elif body.daily_new_items_target is not None:
+        user.daily_new_items_target = body.daily_new_items_target
     if body.furigana_mode is not None:
         user.furigana_mode = FuriganaMode(body.furigana_mode)
     await session.commit()

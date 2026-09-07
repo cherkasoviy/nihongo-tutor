@@ -14,6 +14,7 @@ export interface UserOut {
   timezone: string;
   reminder_time: string | null;
   daily_minutes_target: number;
+  daily_new_items_target: number | null;
   furigana_mode: 'always' | 'auto' | 'off';
   onboarded_at: string | null;
 }
@@ -122,6 +123,12 @@ export interface SessionStep {
   choices: string[];
 }
 
+export interface PlacementResult {
+  seeded: number;
+  skipped_already_reviewed: number;
+  cleared: number;
+}
+
 export interface RevealResult {
   answer: string;
 }
@@ -149,6 +156,7 @@ export interface Stats {
   kana_total: number;
   kana_introduced: number;
   kana_known: number;
+  kana_claimed: number;
   due_now: number;
   reviews_7d: number;
   retention_7d: number | null;

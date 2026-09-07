@@ -108,10 +108,10 @@ Models live in `backend/app/db/models/`; every module must be imported in
 
 ## How a lesson works (Phase 1)
 
-1. `/today` builds the day's session. The planner decides how many new syllables to introduce from
-   the learner's due-review backlog, their 7-day recall rate and how many days they have missed —
-   the rule is in [`docs/PLAN.md`](docs/PLAN.md) and implemented verbatim in
-   `domain/session_planner.py`.
+1. `/today` builds the day's session. The planner starts from the learner's chosen pace (`/pace`,
+   default 10 new syllables a day) and adjusts it for their due-review backlog, their 7-day recall
+   rate and how many days they have missed — the rule is in [`docs/PLAN.md`](docs/PLAN.md), and the
+   pace is only a starting number: a heavy backlog still zeroes new items whatever was asked for.
 2. A new syllable follows expanding spacing inside the session: introduced, checked immediately, met
    again as a production drill at least five steps later, retested at the wrap-up. **Only the
    wrap-up grade reaches FSRS**; the earlier touches are logged with `intra_session=True` and do not
@@ -122,7 +122,19 @@ Models live in `backend/app/db/models/`; every module must be imported in
    so a redelivered callback or a double tap grades once, and a step answered in chat is already
    closed when the app asks for it.
 5. Finishing at ≥60% of steps or ≥12 minutes counts the day and advances the streak, which forgives
-   one missed day per ISO week.
+   one missed day per ISO week. A day with nothing due counts too — turning up to an empty queue is
+   not failing it, and a learner who has finished the syllabary has a fortnight of such days.
+6. Finishing does not end the day: `/today` then offers an extra **practice** sitting, and `/review`
+   asks for one at any time. Practice serves reviews only — never new items — and cannot earn the
+   streak a second time. Drills the scheduler did not ask for are logged but leave the schedule
+   alone, so extra work can never push a real review out.
+7. A learner who already reads some kana can mark syllables known from the grid ("Уже знаю…"), by
+   gojūon group or one at a time. A claim is seeded rather than skipped: it is scheduled as if
+   answered correctly twice, so the scheduler asks about it within a couple of weeks and verifies
+   the claim instead of trusting it. `/stats` reports verified and claimed separately.
+8. Once a recognition card reaches review state the drill changes from a four-option grid to free
+   recall — the glyph alone, then Не помню / Помню / Легко, with Hard inferred from how long the
+   answer stayed hidden.
 
 ## How onboarding works
 

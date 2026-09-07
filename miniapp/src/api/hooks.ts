@@ -9,6 +9,7 @@ import {
   type InviteOut,
   type KanaCell,
   type KanaScript,
+  type PlacementResult,
   type RevealResult,
   type SessionState,
   type Stats,
@@ -53,6 +54,8 @@ export interface SettingsPatch {
   reminder_time?: string | null;
   clear_reminder?: boolean;
   daily_minutes_target?: number;
+  daily_new_items_target?: number;
+  reset_new_items_target?: boolean;
   furigana_mode?: string;
 }
 
@@ -73,6 +76,23 @@ export function useKanaGrid(script?: KanaScript) {
     queryFn: async () =>
       getJson<KanaCell[]>(`/api/content/kana${script ? `?script=${script}` : ''}`, await ensureToken()),
     staleTime: 60_000,
+  });
+}
+
+/** Claim syllables as already known, or take a claim back. */
+export function useSetKanaKnown() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { itemIds: string[]; known: boolean }) =>
+      postJson<PlacementResult>(
+        '/api/content/kana/known',
+        { item_ids: vars.itemIds, known: vars.known },
+        await ensureToken(),
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['kana'] });
+      void qc.invalidateQueries({ queryKey: ['stats'] });
+    },
   });
 }
 
