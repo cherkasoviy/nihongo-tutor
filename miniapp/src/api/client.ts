@@ -14,6 +14,7 @@ export interface UserOut {
   timezone: string;
   reminder_time: string | null;
   daily_minutes_target: number;
+  daily_new_items_target: number | null;
   furigana_mode: 'always' | 'auto' | 'off';
   onboarded_at: string | null;
 }

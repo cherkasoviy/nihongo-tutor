@@ -53,6 +53,8 @@ export interface SettingsPatch {
   reminder_time?: string | null;
   clear_reminder?: boolean;
   daily_minutes_target?: number;
+  daily_new_items_target?: number;
+  reset_new_items_target?: boolean;
   furigana_mode?: string;
 }
 

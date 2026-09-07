@@ -6,7 +6,15 @@ from collections.abc import Sequence
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from app.bot import texts_ru
-from app.bot.callbacks import SessionAction, SetReminder, StepAck, StepChoice, StepReveal, StepSelfGrade
+from app.bot.callbacks import (
+    SessionAction,
+    SetPace,
+    SetReminder,
+    StepAck,
+    StepChoice,
+    StepReveal,
+    StepSelfGrade,
+)
 
 
 def open_app_keyboard(miniapp_url: str, start_param: str | None = None) -> InlineKeyboardMarkup | None:
@@ -88,4 +96,18 @@ def reminder_keyboard(*, include_off: bool = True) -> InlineKeyboardMarkup:
     ]
     if include_off:
         rows.append([InlineKeyboardButton(text=texts_ru.BUTTON_NO_REMINDER, callback_data=SetReminder(hour=-1).pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# Spanning the range the simulation covered: the default, a gentler pace, and the faster end that
+# still fits the time budget. Anything above MAX_NEW_PER_DAY is refused upstream.
+PACE_CHOICES = (5, 8, 10, 12, 15, 20)
+
+
+def pace_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=str(n), callback_data=SetPace(count=n).pack()) for n in PACE_CHOICES[i : i + 3]]
+        for i in range(0, len(PACE_CHOICES), 3)
+    ]
+    rows.append([InlineKeyboardButton(text=texts_ru.BUTTON_PACE_DEFAULT, callback_data=SetPace(count=0).pack())])
     return InlineKeyboardMarkup(inline_keyboard=rows)

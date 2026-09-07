@@ -12,12 +12,13 @@ from collections.abc import AsyncIterator
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
 from app.content_pipeline.import_kana import import_kana
-from app.db.models import Card, CardDirection, CardState, SessionStep, User, UserRole
+from app.db.models import Card, CardDirection, CardState, SessionStep, StepKind, User, UserRole
+from app.domain.session_planner import MAX_NEW_PER_DAY
 from app.main import create_app
 from app.services import user_service
 from app.services.user_service import TelegramIdentity
@@ -373,3 +374,53 @@ async def test_revealing_someone_elses_step_is_not_found(
 
     resp = await client.post(f"/api/session/steps/{step['id']}/reveal", headers=theirs)
     assert resp.status_code == 404
+
+
+# --- pace -------------------------------------------------------------------
+
+
+async def test_the_pace_can_be_chosen_and_reset(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    headers = await _auth(client, await _learner(sessionmaker, with_kana=False))
+
+    assert (await client.get("/api/auth/me", headers=headers)).json()["daily_new_items_target"] is None
+
+    chosen = (await client.patch("/api/settings", json={"daily_new_items_target": 15}, headers=headers)).json()
+    assert chosen["daily_new_items_target"] == 15
+
+    back = (await client.patch("/api/settings", json={"reset_new_items_target": True}, headers=headers)).json()
+    assert back["daily_new_items_target"] is None, "resetting returns to the stage default"
+
+
+@pytest.mark.parametrize("pace", [0, -1, MAX_NEW_PER_DAY + 1, 999])
+async def test_an_unsurvivable_pace_is_refused(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession], pace: int
+) -> None:
+    headers = await _auth(client, await _learner(sessionmaker, with_kana=False))
+    resp = await client.patch("/api/settings", json={"daily_new_items_target": pace}, headers=headers)
+    assert resp.status_code == 422
+
+
+async def test_a_chosen_pace_changes_how_much_the_lesson_teaches(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    """The setting has to reach the planner, not just the users table."""
+    headers = await _auth(client, await _learner(sessionmaker))
+    await client.patch("/api/settings", json={"daily_new_items_target": 3}, headers=headers)
+
+    session = (await client.post("/api/session/today", headers=headers)).json()
+    async with sessionmaker() as s:
+        intros = int(
+            (
+                await s.execute(
+                    select(func.count())
+                    .select_from(SessionStep)
+                    .where(
+                        SessionStep.session_id == uuid.UUID(session["id"]),
+                        SessionStep.kind == StepKind.intro_item,
+                    )
+                )
+            ).scalar_one()
+        )
+    assert intros == 3, f"asked for 3 new syllables, lesson introduced {intros}"

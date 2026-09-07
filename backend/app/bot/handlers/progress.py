@@ -16,11 +16,12 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot import texts_ru
-from app.bot.callbacks import SetReminder
+from app.bot.callbacks import SetPace, SetReminder
 from app.bot.handlers.start import identity_from_message
-from app.bot.keyboards import open_app_keyboard, reminder_keyboard
+from app.bot.keyboards import open_app_keyboard, pace_keyboard, reminder_keyboard
 from app.config import Settings
 from app.db.models.users import FuriganaMode, User, UserStatus
+from app.domain.session_planner import KANA_NEW_PER_DAY, MAX_NEW_PER_DAY
 from app.services import stats_service, user_service
 
 router = Router(name="progress")
@@ -83,6 +84,7 @@ async def cmd_settings(message: Message, settings: Settings, sessionmaker: async
             timezone=user.timezone,
             reminder=reminder,
             minutes=user.daily_minutes_target,
+            pace=_describe_pace(user),
             furigana=_FURIGANA_RU[user.furigana_mode],
         )
     await message.answer(text, reply_markup=open_app_keyboard(settings.miniapp_url))
@@ -148,3 +150,46 @@ async def cmd_reminder(message: Message, sessionmaker: async_sessionmaker[AsyncS
             return
         current = user.reminder_time.strftime("%H:%M") if user.reminder_time else texts_ru.SETTINGS_NO_REMINDER
     await message.answer(texts_ru.SETTINGS_ASK_REMINDER.format(current=current), reply_markup=reminder_keyboard())
+
+
+@router.message(Command("pace"))
+async def cmd_pace(message: Message, sessionmaker: async_sessionmaker[AsyncSession]) -> None:
+    """Change how many new syllables a day the lesson introduces."""
+    async with sessionmaker() as session:
+        user = await _require_user(message, session)
+        if user is None:
+            return
+        current = _describe_pace(user)
+    await message.answer(texts_ru.PACE_ASK.format(current=current), reply_markup=pace_keyboard())
+
+
+@router.callback_query(SetPace.filter())
+async def on_set_pace(
+    query: CallbackQuery,
+    callback_data: SetPace,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    async with sessionmaker() as session:
+        user = await user_service.get_by_tg_id(session, query.from_user.id)
+        if user is None:
+            await query.answer(texts_ru.NOT_REGISTERED)
+            return
+        chosen = callback_data.count
+        user.daily_new_items_target = None if chosen <= 0 else min(chosen, MAX_NEW_PER_DAY)
+        await session.commit()
+        text = (
+            texts_ru.PACE_SET.format(count=user.daily_new_items_target)
+            if user.daily_new_items_target
+            else texts_ru.PACE_DEFAULT_SET.format(count=KANA_NEW_PER_DAY)
+        )
+
+    await query.answer()
+    if isinstance(query.message, Message):
+        with contextlib.suppress(TelegramBadRequest):
+            await query.message.edit_text(text, reply_markup=None)
+
+
+def _describe_pace(user: User) -> str:
+    if user.daily_new_items_target:
+        return str(user.daily_new_items_target)
+    return texts_ru.PACE_CURRENT_DEFAULT.format(count=KANA_NEW_PER_DAY)
