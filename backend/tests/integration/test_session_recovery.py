@@ -16,8 +16,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.content_pipeline.import_kana import import_kana
-from app.db.models.learning import Card, LearningSession, SessionStep, StepKind
+from app.db.models.learning import Card, LearningSession, SessionKind, SessionStep, StepKind
 from app.db.models.users import User, UserRole
+from app.domain.grading import SelfGrade
 from app.services import card_service, session_service, user_service
 from app.services.session_service import KANA_STAGES
 from app.services.user_service import TelegramIdentity
@@ -53,10 +54,45 @@ async def _introduced_chars(sessionmaker: async_sessionmaker[AsyncSession], lear
         return {str(step.payload["char"]) for step in steps}
 
 
+async def _play(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    user: User,
+    learning: LearningSession,
+    now: dt.datetime,
+) -> None:
+    """Answer every remaining step correctly and close the sitting."""
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        for _ in range(400):
+            step = await session_service.next_step(s, learning_session_id=learning.id)
+            if step is None:
+                break
+            await session_service.mark_shown(s, step=step, now=now, message_id=None)
+            mode = step.payload.get("mode")
+            if mode == "ack":
+                await session_service.acknowledge(s, step=step, now=now)
+            elif mode == "self":
+                await session_service.reveal(s, step=step, now=now)
+                await session_service.submit_self_grade(s, user=learner, step=step, grade=SelfGrade.knew, now=now)
+            else:
+                await session_service.submit_choice(
+                    s, user=learner, step=step, choice=int(step.payload["correct"]), now=now
+                )
+        current = await s.get(LearningSession, learning.id)
+        assert current is not None
+        await session_service.finish(s, user=learner, learning=current, now=now)
+        await s.commit()
+
+
 async def test_an_abandoned_lesson_offers_its_syllables_again_the_same_day(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
-    """Stopping is "not now", not "throw these five away"."""
+    """Stopping is "not now", not "throw these five away".
+
+    Coming back the same day must hand the learner the same lesson, and must not open a second
+    planned lesson for the date — the day's new-item dose is issued once.
+    """
     now = dt.datetime(2026, 4, 1, 9, 0, tzinfo=dt.UTC)
     user = await _learner(sessionmaker, now=now)
 
@@ -80,10 +116,22 @@ async def test_an_abandoned_lesson_offers_its_syllables_again_the_same_day(
     assert await _introduced_chars(sessionmaker, second) == abandoned_chars
 
     async with sessionmaker() as s:
+        dailies = list(
+            await s.scalars(
+                select(LearningSession).where(
+                    LearningSession.user_id == user.id, LearningSession.kind == SessionKind.daily
+                )
+            )
+        )
+        mid_remaining = await card_service.remaining_new_count(s, user_id=user.id, stages=KANA_STAGES)
+    assert len(dailies) == 1, "a date carries one planned lesson, not one per attempt"
+    assert mid_remaining == before_remaining, "nothing has been answered yet, so nothing is learned yet"
+
+    # Finish it properly and the syllables finally leave the queue.
+    await _play(sessionmaker, user, second, now + dt.timedelta(hours=2))
+    async with sessionmaker() as s:
         after_remaining = await card_service.remaining_new_count(s, user_id=user.id, stages=KANA_STAGES)
-    assert after_remaining == before_remaining - len(
-        abandoned_chars
-    ), "only the syllables actually being taught may leave the queue"
+    assert after_remaining == before_remaining - len(abandoned_chars)
 
 
 async def test_a_lesson_left_open_over_midnight_does_not_swallow_its_syllables(

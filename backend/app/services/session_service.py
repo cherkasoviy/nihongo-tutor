@@ -313,19 +313,47 @@ def _drill_step(
     )
 
 
-async def _open_session(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> LearningSession | None:
-    """An unfinished sitting from today, if there is one. Resuming beats starting something new."""
+async def _resumable_session(
+    session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date
+) -> LearningSession | None:
+    """Today's sitting with work still left in it, whether or not the learner walked away.
+
+    An abandoned sitting counts. Stopping means "not now", not "throw these five syllables away" —
+    and since the day holds at most one planned lesson, refusing to pick it back up would leave the
+    learner nothing but practice for the rest of the day and strand the syllables it had introduced.
+    A sitting with no unanswered steps left is finished business and is never resumed.
+    """
+    unanswered = (
+        select(SessionStep.id)
+        .where(SessionStep.session_id == LearningSession.id, SessionStep.status != StepStatus.answered)
+        .exists()
+    )
     stmt = (
         select(LearningSession)
         .where(
             LearningSession.user_id == user_id,
             LearningSession.local_date == local_date,
-            LearningSession.outcome == SessionOutcome.in_progress,
+            LearningSession.outcome.in_((SessionOutcome.in_progress, SessionOutcome.abandoned)),
+            unanswered,
         )
         .order_by(LearningSession.started_at.desc())
         .limit(1)
     )
     return (await session.scalars(stmt)).first()
+
+
+async def _has_daily(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> bool:
+    """Whether the day's planned lesson has been issued at all, however it ended.
+
+    Distinct from :func:`daily_done`, which asks whether it was *finished*. Creation has to key off
+    this one: a date carries at most one ``daily`` session, so anything after it is practice.
+    """
+    stmt = select(LearningSession.id).where(
+        LearningSession.user_id == user_id,
+        LearningSession.local_date == local_date,
+        LearningSession.kind == SessionKind.daily,
+    )
+    return (await session.scalars(stmt)).first() is not None
 
 
 async def in_progress_session(
@@ -381,20 +409,26 @@ async def start_or_resume(
 ) -> tuple[LearningSession, bool]:
     """The sitting to show the learner right now. Returns ``(session, created)``.
 
-    An unfinished sitting is always resumed first. Otherwise this starts the day's planned lesson
-    if it has not been done, and an extra *practice* sitting if it has — so finishing today never
-    means being told to come back tomorrow. ``want`` forces the choice (``/review`` asks for
-    practice explicitly); asking for a ``daily`` that is already spent still yields practice, because
-    the day's new items have been issued and re-issuing them would wreck the spacing.
+    A sitting with work left in it is always resumed first, including one the learner stopped.
+    Otherwise this starts the day's planned lesson if it has not been issued yet, and an extra
+    *practice* sitting if it has — so finishing today never means being told to come back tomorrow.
+    ``want`` forces the choice (``/review`` asks for practice explicitly); asking for a ``daily``
+    once the day's lesson has been issued still yields practice, because its new items are out and
+    issuing more would wreck the spacing.
     """
     today = clock.local_date(now, user.timezone)
 
-    open_session = await _open_session(session, user_id=user.id, local_date=today)
-    if open_session is not None:
-        return open_session, False
+    resumable = await _resumable_session(session, user_id=user.id, local_date=today)
+    if resumable is not None:
+        if resumable.outcome is SessionOutcome.abandoned:
+            # Picked back up: it needs to be live again so finishing it can count.
+            resumable.outcome = SessionOutcome.in_progress
+            resumable.finished_at = None
+            await session.flush()
+        return resumable, False
 
-    spent = await daily_done(session, user_id=user.id, local_date=today)
-    kind = SessionKind.practice if (spent or want is SessionKind.practice) else SessionKind.daily
+    issued = await _has_daily(session, user_id=user.id, local_date=today)
+    kind = SessionKind.practice if (issued or want is SessionKind.practice) else SessionKind.daily
 
     # Each sitting gets its own seed so a practice run is not a replay of the morning's lesson;
     # the order is persisted at creation, so reopening one still replays it exactly.

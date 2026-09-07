@@ -10,7 +10,7 @@ import datetime as dt
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.content import Item, ItemStage
@@ -59,31 +59,39 @@ async def introduce_item(
     now: dt.datetime,
     directions: Sequence[CardDirection] = KANA_DIRECTIONS,
 ) -> list[Card]:
-    """Create the card set for one item, skipping directions that already exist.
+    """Ensure the card set for one item exists, and return all of it.
 
     The plan staggers the siblings: recognition is drilled today, production comes due tomorrow, so a
     learner meets the same syllable in a different guise on the following day rather than twice in a row.
+
+    Returns every card for the requested directions, not only the ones this call created. A syllable
+    can be introduced a second time — an abandoned lesson leaves its cards untouched and the item
+    goes back in the queue — and a caller that only saw *new* cards would build that second lesson
+    with an introduction and no checks behind it.
     """
-    existing = set(
-        (await session.scalars(select(Card.direction).where(Card.user_id == user_id, Card.item_id == item_id))).all()
-    )
-    created: list[Card] = []
+    existing = {
+        card.direction: card
+        for card in await session.scalars(select(Card).where(Card.user_id == user_id, Card.item_id == item_id))
+    }
+    cards: list[Card] = []
+    created = False
     for offset, direction in enumerate(directions):
-        if direction in existing:
-            continue
-        card = Card(
-            user_id=user_id,
-            item_id=item_id,
-            direction=direction,
-            state=CardState.new,
-            step=0,
-            due=now + dt.timedelta(days=offset),
-        )
-        session.add(card)
-        created.append(card)
+        card = existing.get(direction)
+        if card is None:
+            card = Card(
+                user_id=user_id,
+                item_id=item_id,
+                direction=direction,
+                state=CardState.new,
+                step=0,
+                due=now + dt.timedelta(days=offset),
+            )
+            session.add(card)
+            created = True
+        cards.append(card)
     if created:
         await session.flush()
-    return created
+    return cards
 
 
 def _due_query(user_id: uuid.UUID, now: dt.datetime) -> Select[tuple[Card]]:
@@ -110,6 +118,28 @@ async def due_count(session: AsyncSession, *, user_id: uuid.UUID, now: dt.dateti
     return int((await session.execute(stmt)).scalar_one())
 
 
+def _taught_items(user_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
+    """Items this learner has genuinely started on.
+
+    Having a card is not the same as having been taught. ``introduce_item`` creates cards the moment
+    the planner *decides* to introduce something, and a sitting that is then abandoned — stopped, or
+    left open across local midnight — leaves those cards sitting in ``new`` with nothing ever asked
+    of them. Keying "introduced" off the mere existence of a row put such syllables in a hole: never
+    offered again, never due (the due queries skip ``new``), and counted as learned.
+
+    So an item counts as taught only once one of its cards has either left ``new`` or collected a
+    review log. Everything else is still owed to the learner. ``introduce_item`` skips directions
+    that already exist, so re-offering an item reuses its untouched cards instead of duplicating them.
+    """
+    return select(Card.item_id).where(
+        Card.user_id == user_id,
+        or_(
+            Card.state != CardState.new,
+            select(ReviewLog.id).where(ReviewLog.card_id == Card.id).exists(),
+        ),
+    )
+
+
 async def next_new_items(
     session: AsyncSession,
     *,
@@ -117,10 +147,10 @@ async def next_new_items(
     stages: Sequence[ItemStage],
     limit: int,
 ) -> list[Item]:
-    """The next un-introduced items in curriculum order."""
+    """The next items the learner has not been taught yet, in curriculum order."""
     if limit <= 0:
         return []
-    already = select(Card.item_id).where(Card.user_id == user_id)
+    already = _taught_items(user_id)
     stmt = (
         select(Item)
         .where(Item.active.is_(True), Item.stage.in_(stages), Item.id.not_in(already))
@@ -131,7 +161,8 @@ async def next_new_items(
 
 
 async def remaining_new_count(session: AsyncSession, *, user_id: uuid.UUID, stages: Sequence[ItemStage]) -> int:
-    already = select(Card.item_id).where(Card.user_id == user_id)
+    """How much of the curriculum is still owed. Mirrors :func:`next_new_items` exactly."""
+    already = _taught_items(user_id)
     stmt = select(func.count()).select_from(
         select(Item.id).where(Item.active.is_(True), Item.stage.in_(stages), Item.id.not_in(already)).subquery()
     )
