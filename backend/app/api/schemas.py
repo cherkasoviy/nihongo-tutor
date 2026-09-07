@@ -105,6 +105,19 @@ class KanaCellOut(BaseModel):
     reps: int
 
 
+class PlacementIn(BaseModel):
+    """Which syllables the learner is claiming (or taking back)."""
+
+    item_ids: list[uuid.UUID] = Field(min_length=1, max_length=250)
+    known: bool = True
+
+
+class PlacementOut(BaseModel):
+    seeded: int
+    skipped_already_reviewed: int
+    cleared: int
+
+
 class SessionStepOut(BaseModel):
     id: uuid.UUID
     idx: int
@@ -153,6 +166,7 @@ class StatsOut(BaseModel):
     kana_total: int
     kana_introduced: int
     kana_known: int
+    kana_claimed: int
     due_now: int
     reviews_7d: int
     retention_7d: float | None

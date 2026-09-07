@@ -19,7 +19,7 @@ from app.db.models.learning import (
     SessionOutcome,
     Streak,
 )
-from app.services import card_service
+from app.services import card_service, placement_service
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +27,7 @@ class LearnerStats:
     kana_total: int
     kana_introduced: int
     kana_known: int
+    kana_claimed: int
     due_now: int
     reviews_7d: int
     retention_7d: float | None
@@ -38,7 +39,9 @@ class LearnerStats:
 
 
 # A syllable counts as "known" once its recognition card has left the learning steps and survived a
-# real interval. Reps alone would count four massed retests in one session as mastery.
+# real interval. Reps alone would count four massed retests in one session as mastery — and a
+# placement claim would count as mastery on the strength of a tick, so "known" also requires that
+# the learner has actually answered the card at least once.
 KNOWN_STATES = (CardState.review,)
 
 
@@ -58,6 +61,7 @@ async def learner_stats(session: AsyncSession, *, user_id: uuid.UUID, now: dt.da
     )
     kana_introduced = int((await session.execute(introduced_stmt)).scalar_one())
 
+    verified = select(ReviewLog.id).where(ReviewLog.card_id == Card.id).exists()
     known_stmt = (
         select(func.count(func.distinct(Card.item_id)))
         .join(Item, Item.id == Card.item_id)
@@ -66,6 +70,7 @@ async def learner_stats(session: AsyncSession, *, user_id: uuid.UUID, now: dt.da
             Item.type == ItemType.kana,
             Card.direction == CardDirection.recognition,
             Card.state.in_(KNOWN_STATES),
+            verified,
         )
     )
     kana_known = int((await session.execute(known_stmt)).scalar_one())
@@ -115,6 +120,7 @@ async def learner_stats(session: AsyncSession, *, user_id: uuid.UUID, now: dt.da
         kana_total=kana_total,
         kana_introduced=kana_introduced,
         kana_known=kana_known,
+        kana_claimed=await placement_service.claimed_but_unverified(session, user_id=user_id),
         due_now=await card_service.due_count(session, user_id=user_id, now=now),
         reviews_7d=reviews_7d,
         retention_7d=await card_service.retention_7d(session, user_id=user_id, now=now),
