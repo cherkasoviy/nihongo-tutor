@@ -345,8 +345,9 @@ async def _resumable_session(
 async def _has_daily(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> bool:
     """Whether the day's planned lesson has been issued at all, however it ended.
 
-    Distinct from :func:`daily_done`, which asks whether it was *finished*. Creation has to key off
-    this one: a date carries at most one ``daily`` session, so anything after it is practice.
+    Deliberately "issued at all" rather than "finished": a date carries at most one ``daily``
+    session — the partial unique index makes that unrepresentable — so anything after it is
+    practice, however the first one ended.
     """
     stmt = select(LearningSession.id).where(
         LearningSession.user_id == user_id,
@@ -386,17 +387,6 @@ async def sessions_today(session: AsyncSession, *, user_id: uuid.UUID, local_dat
         .order_by(LearningSession.started_at)
     )
     return list(await session.scalars(stmt))
-
-
-async def daily_done(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> bool:
-    """Has the planned lesson for this date already been finished?"""
-    stmt = select(LearningSession.id).where(
-        LearningSession.user_id == user_id,
-        LearningSession.local_date == local_date,
-        LearningSession.kind == SessionKind.daily,
-        LearningSession.outcome == SessionOutcome.completed,
-    )
-    return (await session.scalars(stmt)).first() is not None
 
 
 async def start_or_resume(
@@ -450,10 +440,7 @@ async def start_or_resume(
         client=client,
         kind=kind,
         planned_steps=len(ordered),
-        # An empty sitting is closed on the spot. Left open it would be resumed forever and the
-        # learner could never start anything else — the "nothing due" case must not become a trap.
-        outcome=SessionOutcome.in_progress if ordered else SessionOutcome.abandoned,
-        finished_at=None if ordered else now,
+        outcome=SessionOutcome.in_progress,
     )
     session.add(learning)
     await session.flush()
@@ -478,6 +465,11 @@ async def start_or_resume(
         kind=kind.value,
         steps=len(ordered),
     )
+    if not ordered:
+        # Nothing was owed. Close it here rather than leaving an empty sitting open: it would be
+        # picked up forever and the learner could never start anything else. Going through finish()
+        # rather than setting the outcome inline is what lets the day still count for the streak.
+        await finish(session, user=user, learning=learning, now=now)
     return learning, True
 
 
@@ -777,19 +769,28 @@ async def finish(
     if learning.outcome != SessionOutcome.in_progress:
         return learning.outcome == SessionOutcome.completed
 
-    counted = streak_domain.session_counts(
+    nothing_was_owed = learning.planned_steps == 0
+    did_enough = streak_domain.session_counts(
         completed_steps=learning.completed_steps,
         planned_steps=learning.planned_steps,
         active_seconds=learning.active_ms / 1000.0,
         minutes_target=user.daily_minutes_target,
     )
     learning.finished_at = now
-    learning.outcome = SessionOutcome.completed if counted and not abandoned else SessionOutcome.abandoned
+
+    if abandoned or not did_enough:
+        learning.outcome = SessionOutcome.abandoned
+    elif nothing_was_owed and learning.kind is not SessionKind.daily:
+        # Tapping /review when nothing is due is not an accomplishment worth recording; only the
+        # day's planned lesson gets to be "completed" on the strength of there being nothing to do.
+        learning.outcome = SessionOutcome.abandoned
+    else:
+        learning.outcome = SessionOutcome.completed
 
     # Only the planned lesson earns the day. Practice is voluntary extra work, and letting it award
     # the streak would mean a learner could keep the chain alive on five minutes of review while
     # never meeting a new syllable — and `/review` can be asked for before `/today` has been done.
-    earns_the_day = counted and not abandoned and learning.kind is SessionKind.daily
+    earns_the_day = learning.outcome is SessionOutcome.completed and learning.kind is SessionKind.daily
     if earns_the_day:
         await advance_streak(session, user=user, local_day=learning.local_date)
     await session.flush()

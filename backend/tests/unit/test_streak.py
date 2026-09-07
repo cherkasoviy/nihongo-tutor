@@ -174,8 +174,10 @@ def test_iso_week_key_follows_the_iso_year() -> None:
         (4, 7, 0.0, False),  # 57%
         (0, 24, 12 * 60, True),  # ran out of steam, but put in the twelve minutes
         (0, 24, 12 * 60 - 1, False),
-        (0, 0, 12 * 60, True),  # nothing planned: only time can carry the day
-        (0, 0, 0.0, False),
+        # Nothing planned counts on its own. There is no failing a day the app had nothing to ask
+        # about: the learner turned up, their cards were resting and the curriculum had nothing new.
+        (0, 0, 12 * 60, True),
+        (0, 0, 0.0, True),
     ],
 )
 def test_session_counts(completed: int, planned: int, seconds: float, expected: bool) -> None:
@@ -190,3 +192,29 @@ def test_twelve_minute_floor_is_absolute_not_a_share_of_the_target() -> None:
 def test_time_floor_never_exceeds_the_learners_own_target() -> None:
     assert session_counts(completed_steps=0, planned_steps=30, active_seconds=10 * 60, minutes_target=10)
     assert not session_counts(completed_steps=0, planned_steps=30, active_seconds=10 * 60)  # default target
+
+
+# --- a day with nothing to do ----------------------------------------------------------------
+# Reachable, not theoretical: the kana stage is all the content there is, so a learner who finishes
+# it has a couple of weeks of such days before Phase 2 exists. Punishing that would punish being
+# ahead, which is the opposite of what a forgiving streak is for.
+
+
+def test_a_day_with_nothing_planned_counts() -> None:
+    assert session_counts(completed_steps=0, planned_steps=0, active_seconds=0.0)
+
+
+def test_showing_up_to_an_empty_curriculum_keeps_the_chain() -> None:
+    """The streak must survive a run of days where the app has nothing to offer."""
+    state = StreakState()
+    for offset in range(10):
+        day = MON + offset * DAY
+        assert session_counts(completed_steps=0, planned_steps=0, active_seconds=0.0)
+        state = register_activity(state, day)
+    assert state.current == 10
+    assert state.freeze_used_dates == (), "an empty day is not a gap to be papered over with a freeze"
+
+
+def test_an_empty_day_is_not_confused_with_walking_away() -> None:
+    """A session with steps that went unanswered is still a break; only *no steps* is exempt."""
+    assert not session_counts(completed_steps=0, planned_steps=20, active_seconds=0.0)

@@ -17,7 +17,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.content_pipeline.import_kana import import_kana
-from app.db.models.learning import Card, LearningSession, SessionKind, SessionStep, StepKind
+from app.db.models.learning import (
+    Card,
+    LearningSession,
+    SessionKind,
+    SessionOutcome,
+    SessionStep,
+    StepKind,
+    Streak,
+)
 from app.db.models.users import User, UserRole
 from app.domain.grading import SelfGrade
 from app.services import card_service, session_service, user_service
@@ -28,6 +36,7 @@ from tests.conftest import fresh_tg_id
 pytestmark = pytest.mark.integration
 
 TIMEZONE = "Europe/Berlin"
+NOW = dt.datetime(2026, 4, 1, 9, 0, tzinfo=dt.UTC)
 
 
 async def _learner(sessionmaker: async_sessionmaker[AsyncSession], *, now: dt.datetime) -> User:
@@ -244,3 +253,106 @@ async def test_the_database_refuses_a_second_planned_lesson_for_one_day(
                 )
             )
         await s.commit()
+
+
+# --- being ahead of the curriculum -----------------------------------------------------------
+# Once everything available has been taught and nothing is due, the day's session has no steps in
+# it. That is the normal state for a fortnight after the kana stage finishes, not an edge case, and
+# it must not cost the learner their streak.
+
+
+async def _learner_with_nothing_to_do(sessionmaker: async_sessionmaker[AsyncSession]) -> User:
+    """A learner who has run out of curriculum: no content, so nothing to teach and nothing due.
+
+    The same state a learner reaches by finishing the syllabary, without simulating three weeks to
+    get there — and it does not depend on where FSRS happens to place an interval.
+    """
+    async with sessionmaker() as s:
+        user = await user_service.create_user(
+            s,
+            TelegramIdentity(tg_user_id=fresh_tg_id(), first_name="Аня"),
+            role=UserRole.learner,
+            invited_by=None,
+            daily_budget_usd=0.35,
+            now=NOW,
+        )
+        user.timezone = TIMEZONE
+        await s.commit()
+        return user
+
+
+async def test_a_day_with_nothing_to_do_still_counts(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    user = await _learner_with_nothing_to_do(sessionmaker)
+
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        learning, _ = await session_service.start_or_resume(s, user=learner, now=NOW)
+        await s.commit()
+        streak = await s.get(Streak, user.id)
+
+    assert learning.planned_steps == 0
+    assert learning.outcome is SessionOutcome.completed, "showing up to an empty day is not failing it"
+    assert streak is not None and streak.current == 1
+
+
+async def test_a_run_of_empty_days_does_not_break_the_streak(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The case that matters: finishing the curriculum leaves weeks of these."""
+    user = await _learner_with_nothing_to_do(sessionmaker)
+
+    for day in range(12):
+        async with sessionmaker() as s:
+            learner = await s.get(User, user.id)
+            assert learner is not None
+            await session_service.start_or_resume(s, user=learner, now=NOW + dt.timedelta(days=day))
+            await s.commit()
+
+    async with sessionmaker() as s:
+        streak = await s.get(Streak, user.id)
+    assert streak is not None
+    assert streak.current == 12, "twelve days of turning up is a twelve-day streak"
+    assert streak.longest == 12
+    assert not streak.freeze_used_dates, "an empty day is not a gap; no freeze should be spent"
+
+
+async def test_an_empty_day_does_not_block_the_next_one(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """It is closed on creation, so it can never be resumed forever."""
+    user = await _learner_with_nothing_to_do(sessionmaker)
+
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        first, _ = await session_service.start_or_resume(s, user=learner, now=NOW)
+        await s.commit()
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        second, created = await session_service.start_or_resume(s, user=learner, now=NOW + dt.timedelta(days=1))
+        await s.commit()
+
+    assert created and second.id != first.id
+
+
+async def test_an_empty_practice_tap_still_earns_nothing(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Only the planned lesson may be carried by there being nothing to do."""
+    user = await _learner_with_nothing_to_do(sessionmaker)
+
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        practice, _ = await session_service.start_or_resume(s, user=learner, now=NOW, want=SessionKind.practice)
+        await s.commit()
+        streak = await s.get(Streak, user.id)
+
+    assert practice.kind is SessionKind.practice
+    assert practice.planned_steps == 0
+    assert practice.outcome is SessionOutcome.abandoned
+    assert streak is None, "tapping /review with nothing due is not a day's work"
