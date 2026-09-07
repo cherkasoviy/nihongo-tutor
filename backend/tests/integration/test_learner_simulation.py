@@ -1,24 +1,21 @@
 """A simulated learner walking 30 consecutive days through the kana bootcamp.
 
-This is the plan's headline Phase 1 check, and running it surfaced a genuine inconsistency in the
-plan's own numbers, so the assertions below deliberately differ from its one-line description
-("a simulated 30-day learner completing kana within 12-20 min/day"):
+This is the plan's headline Phase 1 check. Running it originally showed the plan's own numbers could
+not produce what it asked for — "completing kana within 12-20 min/day" — because ``base = 5`` in the
+kana stage caps a day at six new syllables, which is 3-6 minutes of content and about 35 days for
+the syllabary. That was measured, not argued: a diligent learner reached 177 of 208 in a month and a
+learner recalling 70% reached 94.
 
-* **Session length.** The plan fixes ``base = 5 kana/day`` in the kana stage, and its only upward
-  nudge is ``new = min(new + 1, 10)`` — an increment on the base, so six is the real ceiling for a
-  kana day, not ten. Six new syllables cost four steps each (intro, immediate check, delayed
-  production drill, wrap-up retest); with the day's due reviews on top a session lands at roughly
-  25-45 steps, which is 3-6 minutes at the planner's own 8 s/step, not 12-20. Reaching twenty
-  minutes would need something like 20-35 new syllables a day, which contradicts ``base = 5``.
-* **Finishing the syllabary.** 208 syllables at a ceiling of six a day is ~35 days at best, so no
-  learner completes *all* kana inside 30. Hiragana alone (104) finishes comfortably, and that is
-  what the bootcamp gates on.
+Five turned out to be vocabulary pacing applied to kana, where an item is a shape and a sound rather
+than a meaning, a reading and a production form. The kana default is now ten — which is also what
+25% of a seventeen-minute session at eight seconds a step implies — and a learner may choose up to
+:data:`~app.domain.session_planner.MAX_NEW_PER_DAY`. The safety rail was never the low default; it is
+the backlog gate, which zeroes new items by itself once the due queue outgrows the warm-up, and a
+sweep across bases 5-20 showed it doing exactly that.
 
-Rather than assert numbers the algorithm cannot produce, this test pins the properties that are
-both true and worth defending: the day always fits inside its budget, the streak survives 30
-consecutive days, hiragana is finished well inside the month, and the adaptive rules visibly
-throttle a struggling learner relative to a strong one. Raising the kana-stage base is a product
-decision for the plan's author, not something to smuggle in through a test.
+So these tests now pin: both scripts finished inside the month, every session inside its time
+budget, the streak surviving 30 consecutive days, the curriculum taught as a prefix in order, and
+the adaptive rules visibly throttling a struggling learner relative to a strong one.
 """
 
 from __future__ import annotations
@@ -204,10 +201,11 @@ async def test_a_diligent_learner_finishes_hiragana_and_keeps_a_30_day_streak(
     assert sim.completed_days == DAYS
     assert sim.streak == DAYS, "30 consecutive days must not break the streak or spend a freeze"
     assert sim.hiragana_introduced == HIRAGANA_TOTAL, "the bootcamp gates on hiragana; it must finish"
-    assert sim.introduced > HIRAGANA_TOTAL, "and the learner should be well into katakana by day 30"
-    assert (
-        sim.introduced < KANA_TOTAL
-    ), "documented ceiling: at 6 new/day the plan's own algorithm cannot cover 208 syllables in 30 days"
+    assert sim.introduced == KANA_TOTAL, (
+        "both scripts inside the month — this is what raising the kana dose from five to ten bought. "
+        "At five a diligent learner reached 177 of 208 and never finished the syllabary; the ceiling "
+        "was the default, not the algorithm."
+    )
 
 
 async def test_no_session_ever_exceeds_the_daily_budget(
@@ -235,26 +233,44 @@ async def test_the_planner_throttles_a_struggling_learner(
     assert struggling.completed_days == 20, "a struggling learner still finishes the day and keeps the habit"
 
 
-async def test_the_curriculum_is_introduced_in_order_without_gaps(
+async def test_the_curriculum_is_introduced_as_a_prefix_in_order(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
-    """New items follow curriculum_order, so hiragana is exhausted before katakana starts."""
-    await _simulate(sessionmaker, accuracy=1.0, days=10)
+    """New items follow curriculum_order, so hiragana is exhausted before katakana starts.
+
+    The introduced set must be a *prefix of the curriculum*, which is not the same as a contiguous
+    run of integers: hiragana occupies 1-104 and katakana 1001-1104, so a learner who crosses
+    between scripts leaves a gap in the numbers while still being exactly N items in.
+    """
+    await _simulate(sessionmaker, accuracy=1.0, days=14)
 
     async with sessionmaker() as s:
         user_id = (await s.scalars(select(User.id))).one()
-        rows = list(
-            await s.execute(
+        introduced = [
+            row[0]
+            for row in await s.execute(
                 select(Item.curriculum_order)
                 .join(Card, Card.item_id == Item.id)
                 .where(Card.user_id == user_id, Item.type == ItemType.kana)
                 .distinct()
                 .order_by(Item.curriculum_order)
             )
-        )
-        orders = [r[0] for r in rows]
+        ]
+        curriculum = [
+            row[0]
+            for row in await s.execute(
+                select(Item.curriculum_order)
+                .where(Item.type == ItemType.kana, Item.active.is_(True))
+                .order_by(Item.curriculum_order)
+                .limit(len(introduced))
+            )
+        ]
 
-    assert orders == list(range(1, len(orders) + 1)), "introduced items must be a prefix of the curriculum"
+    assert introduced, "the simulation must have introduced something"
+    assert introduced == curriculum, "introduced items must be the first N of the curriculum, in order"
+    assert introduced[:HIRAGANA_TOTAL] == list(
+        range(1, min(len(introduced), HIRAGANA_TOTAL) + 1)
+    ), "hiragana is taught through before katakana begins"
 
 
 async def test_no_grid_ever_offers_the_same_reading_twice(

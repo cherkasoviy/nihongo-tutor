@@ -50,6 +50,10 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     timezone: Mapped[str] = mapped_column(String(64), default=DEFAULT_TIMEZONE, nullable=False)
     reminder_time: Mapped[dt.time | None] = mapped_column(Time)
     daily_minutes_target: Mapped[int] = mapped_column(Integer, default=17, nullable=False)
+    # The learner's chosen pace, or NULL to take the stage default. Only a starting number: the
+    # planner's backlog and retention rules still apply on top, so a high setting cannot outrun the
+    # review queue — it just stops the app being slower than the learner.
+    daily_new_items_target: Mapped[int | None] = mapped_column(Integer)
     furigana_mode: Mapped[FuriganaMode] = mapped_column(
         Enum(FuriganaMode, name="furigana_mode"), default=FuriganaMode.auto, nullable=False
     )

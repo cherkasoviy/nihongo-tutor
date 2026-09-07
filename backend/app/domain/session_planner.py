@@ -34,6 +34,7 @@ __all__ = [
     "HIGH_RETENTION_7D",
     "LOW_RETENTION_7D",
     "MAX_BACKLOG_RATIO",
+    "MAX_NEW_PER_DAY",
     "NEW_ITEMS_CEILING",
     "SECTION_SHARES",
     "DailyPlanBlueprint",
@@ -48,7 +49,20 @@ __all__ = [
 DEFAULT_DAILY_MINUTES_TARGET: Final = 17
 DEFAULT_AVG_REVIEW_SECONDS: Final = 8.0
 
-KANA_NEW_PER_DAY: Final = 5
+# Ten, not the plan's five. Five was drawn from vocabulary pacing, where each item carries meaning,
+# a reading and a production form; a kana is a shape and a sound. Measured over 30 simulated days,
+# five leaves a learner recalling 70% of what they see with 94 of 208 syllables and hiragana still
+# unfinished after a month, while ten reaches hiragana on day 11 and both scripts inside three weeks
+# with the longest session still under eleven minutes. It also matches what the plan's own section
+# budget implies: 25% of seventeen minutes at eight seconds a step is about ten introductions.
+#
+# The backlog gate, not this number, is what keeps a learner safe — it zeroes new items by itself
+# once the due queue outgrows the warm-up, and the sweep shows it doing exactly that.
+KANA_NEW_PER_DAY: Final = 10
+# The ceiling a learner may choose. Fifteen and twenty finish sooner and stay inside the time
+# budget, but the day-to-day load gets spiky and no simulation can tell us whether recall holds up
+# against twenty confusable glyphs at once — that risk is the learner's to take knowingly.
+MAX_NEW_PER_DAY: Final = 20
 CORE_VOCAB_PER_DAY: Final = 4
 CORE_GRAMMAR_EVERY_N_DAYS: Final = 2
 
@@ -57,7 +71,11 @@ BACKLOG_TAPER_RATIO: Final = 1.0
 LOW_RETENTION_7D: Final = 0.80
 HIGH_RETENTION_7D: Final = 0.92
 LOW_RETENTION_PENALTY: Final = 2
-NEW_ITEMS_CEILING: Final = 10
+# The plan wrote this cap as a literal 10, which was comfortably above its base of 5. Now that the
+# base *is* 10 and a learner may choose more, leaving it at 10 would silently disable the
+# high-retention bump — the reward for doing well would be nothing. It is the same idea either way:
+# don't let the nudge push anyone past what a person can absorb in a day.
+NEW_ITEMS_CEILING: Final = MAX_NEW_PER_DAY
 SESSIONS_UNDER_TARGET: Final = 3
 MISSED_DAYS_THRESHOLD: Final = 3
 MISSED_DAYS_CAP: Final = 2
@@ -104,6 +122,8 @@ class PlannerInput:
     """Un-introduced items the curriculum can actually offer; the hard ceiling on the answer."""
     day_index: int = 0
     """Days spent in the current stage, for the core stage's every-other-day grammar slot."""
+    new_items_target: int | None = None
+    """The learner's chosen pace, or None to use the stage default."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,12 +158,21 @@ def backlog_ratio(due_count: int, daily_minutes_target: int, avg_review_seconds:
     return min(due_count / capacity, MAX_BACKLOG_RATIO)
 
 
-def base_new_items(stage: ItemStage, day_index: int) -> int:
-    """The unadjusted daily dose for a stage.
+def base_new_items(stage: ItemStage, day_index: int, chosen: int | None = None) -> int:
+    """The unadjusted daily dose for a stage, before any adaptive adjustment.
+
+    ``chosen`` is the learner's own pace if they set one. It replaces the stage default rather than
+    scaling it, and it is only the *starting* number: everything downstream still applies, so asking
+    for twenty on a day with a heavy backlog still yields nothing.
 
     Core-stage grammar lands on odd ``day_index`` — every second day, starting from the day after
     the learner enters the stage, so the transition day is not the heaviest one.
     """
+    if chosen is not None:
+        chosen = max(1, min(chosen, MAX_NEW_PER_DAY))
+        if stage is ItemStage.core:
+            return chosen + (1 if day_index % CORE_GRAMMAR_EVERY_N_DAYS == 1 else 0)
+        return chosen
     if stage is ItemStage.core:
         return CORE_VOCAB_PER_DAY + (1 if day_index % CORE_GRAMMAR_EVERY_N_DAYS == 1 else 0)
     return KANA_NEW_PER_DAY
@@ -162,7 +191,7 @@ def plan_day(inp: PlannerInput) -> DailyPlanBlueprint:
     capacity = review_capacity(inp.daily_minutes_target, inp.avg_review_seconds)
     ratio = backlog_ratio(inp.due_count, inp.daily_minutes_target, inp.avg_review_seconds)
 
-    new_items = base_new_items(inp.stage, inp.day_index)
+    new_items = base_new_items(inp.stage, inp.day_index, inp.new_items_target)
     if ratio > BACKLOG_PAUSE_RATIO:
         new_items = 0
     elif ratio > BACKLOG_TAPER_RATIO:

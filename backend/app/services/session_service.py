@@ -544,6 +544,7 @@ async def _plan_for(
             due_count=due,
             retention_7d=retention,
             daily_minutes_target=user.daily_minutes_target,
+            new_items_target=user.daily_new_items_target,
             missed_days=await _missed_days(session, user_id=user.id, today=today),
             recent_session_seconds=recent,
             available_new_items=available,
