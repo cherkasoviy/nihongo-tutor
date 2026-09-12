@@ -34,6 +34,9 @@ for _ in $(seq 1 30); do
 done
 "${COMPOSE[@]}" ps
 
+echo "==> importing the kana seed (upserts on natural keys; safe every deploy)"
+"${COMPOSE[@]}" exec -T api nihongo-content import-kana
+
 DOMAIN="$(grep -E '^DOMAIN=' infra/.env | cut -d= -f2-)"
 if [[ -n "$DOMAIN" ]]; then
   echo "==> smoke: https://$DOMAIN/healthz"
