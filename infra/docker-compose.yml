@@ -49,10 +49,11 @@ services:
 
   api:
     <<: *backend
-    command: >
-      sh -c "alembic upgrade head &&
-             uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
-                     --proxy-headers --forwarded-allow-ips='*' --no-server-header"
+    # One line on purpose. A folded scalar (">") keeps the newline before any *more indented*
+    # line, so the continuation arrived at sh as separate commands: uvicorn ran without
+    # --proxy-headers, and sh then tried to execute "--proxy-headers ..." on its own and exited 127.
+    # `exec` replaces sh with uvicorn so SIGTERM reaches it directly on `compose down`.
+    command: sh -c "alembic upgrade head && exec uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*' --no-server-header"
     expose:
       - "8000"
     healthcheck:
