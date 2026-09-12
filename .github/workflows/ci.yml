@@ -79,6 +79,22 @@ jobs:
           docker compose -f infra/docker-compose.yml --env-file infra/.env config -q
           docker compose -f infra/docker-compose.dev.yml config -q
           rm infra/.env
+      - name: no multi-line service commands
+        # A folded ">" scalar keeps newlines before more-indented lines, which silently splits a
+        # command into several and drops the trailing flags. It passes `compose config` happily.
+        run: |
+          python3 - <<'EOF'
+          import sys, yaml
+          bad = []
+          for f in ("infra/docker-compose.yml", "infra/docker-compose.dev.yml"):
+              for name, svc in (yaml.safe_load(open(f))["services"]).items():
+                  cmd = svc.get("command")
+                  if isinstance(cmd, str) and "\n" in cmd.strip():
+                      bad.append(f"{f}: {name}")
+          if bad:
+              sys.exit("multi-line command in: " + ", ".join(bad))
+          print("all service commands are single-line")
+          EOF
       - run: bash -n infra/scripts/*.sh
       - name: no secrets committed
         run: |
