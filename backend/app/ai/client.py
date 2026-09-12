@@ -7,7 +7,9 @@ Phase 2/3. Rules baked in here (see docs/PLAN.md, "SDK rules"):
 * Structured output via ``client.beta.messages.parse(..., output_format=PydanticModel)`` which
   fills ``output_config.format`` with a strict JSON schema (``additionalProperties: false``).
 * No assistant prefill, no ``temperature``, no ``budget_tokens``; effort via ``output_config.effort``.
-* Server-side fallbacks on by default: ``betas=[SERVER_SIDE_FALLBACK_BETA]``, ``fallbacks="default"``.
+* Refusals always fall back. On the first-party API that is server-side
+  (``betas=[SERVER_SIDE_FALLBACK_BETA]``, ``fallbacks="default"``); on Vertex, where the parameter
+  does not exist, it is the SDK's client-side ``BetaRefusalFallbackMiddleware``.
 * Always inspect ``stop_reason``: ``"refusal"`` degrades to a canned Russian message, never an error.
 * Every response's ``usage`` is handed to a ``UsageSink`` so the ledger sees cache hits.
 """
@@ -19,7 +21,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
 
-from anthropic import AsyncAnthropic
+from anthropic import AsyncAnthropic, AsyncAnthropicVertex, BetaRefusalFallbackMiddleware
 from anthropic.types.beta import BetaTextBlockParam
 from pydantic import BaseModel
 
@@ -99,17 +101,39 @@ class SystemBlocks:
         return blocks
 
 
+AnyAsyncClient = AsyncAnthropic | AsyncAnthropicVertex
+
+
+def build_async_client(settings: Settings) -> AnyAsyncClient:
+    """Vertex when a project is configured, the first-party API otherwise.
+
+    On Vertex the refusal retry has to happen client-side: the server-side ``fallbacks`` parameter
+    is a first-party feature, so the SDK ships ``BetaRefusalFallbackMiddleware`` to splice the retry
+    onto the same call. It takes an explicit model list — there is no ``"default"`` routing policy
+    to defer to — which is why the fallback model is a setting.
+    """
+    if settings.uses_vertex:
+        return AsyncAnthropicVertex(
+            project_id=settings.anthropic_vertex_project,
+            region=settings.anthropic_vertex_region,
+            middleware=[BetaRefusalFallbackMiddleware([{"model": settings.anthropic_fallback_model}])],
+        )
+    return AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value() or None)
+
+
 class ClaudeClient:
     def __init__(
         self,
         settings: Settings,
         *,
-        client: AsyncAnthropic | None = None,
+        client: AnyAsyncClient | None = None,
         usage_sink: UsageSink | None = None,
     ) -> None:
         self._settings = settings
-        api_key = settings.anthropic_api_key.get_secret_value() or None
-        self._client = client or AsyncAnthropic(api_key=api_key)
+        self._client = client or build_async_client(settings)
+        # Server-side fallbacks and the Batches API are first-party only; on Vertex the middleware
+        # above covers refusals, and offline generation pays full price instead of the batch rate.
+        self._server_side_fallbacks = not settings.uses_vertex
         self._usage_sink: UsageSink = usage_sink or NullUsageSink()
 
     def model_for(self, tier: Tier) -> str:
@@ -134,15 +158,20 @@ class ClaudeClient:
         if effort is not None:
             output_config["effort"] = effort.value
 
-        response = await self._client.beta.messages.parse(
+        fallback_params: dict[str, Any] = (
+            {"betas": [SERVER_SIDE_FALLBACK_BETA], "fallbacks": "default"} if self._server_side_fallbacks else {}
+        )
+        # The two client classes are unrelated by inheritance — Vertex ships its own
+        # ``beta.messages`` — so mypy cannot resolve one ``parse`` across the union even though the
+        # signatures match. Narrowed here rather than weakening the attribute's type.
+        response = await self._client.beta.messages.parse(  # type: ignore[misc]
             model=model,
             max_tokens=max_tokens,
             system=system.to_params(),
             messages=list(messages),  # type: ignore[arg-type]
             output_format=output_model,
             output_config=output_config or None,  # type: ignore[arg-type]
-            betas=[SERVER_SIDE_FALLBACK_BETA],
-            fallbacks="default",
+            **fallback_params,
         )
 
         usage = Usage(

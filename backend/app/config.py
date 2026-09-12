@@ -46,12 +46,23 @@ class Settings(BaseSettings):
     initdata_max_age_seconds: int = 24 * 3600
 
     # --- AI providers --------------------------------------------------------
+    # Claude is reached through Vertex AI when a project is set, and through the first-party API
+    # otherwise. Vertex authenticates with the same Google service account as TTS/STT, so no
+    # Anthropic key exists anywhere in the deployment.
+    anthropic_vertex_project: str = ""
+    anthropic_vertex_region: str = "global"
     anthropic_api_key: SecretStr = SecretStr("")
-    openai_api_key: SecretStr = SecretStr("")
+    # Where a refusal is retried. Server-side fallbacks are not offered on Vertex, so the SDK's
+    # client-side middleware needs an explicit model rather than the "default" routing policy.
+    anthropic_fallback_model: str = "claude-opus-4-8"
     google_application_credentials: str | None = None
     default_daily_budget_usd: float = 0.35
     model_strong: str = "claude-opus-5"
     model_fast: str = "claude-opus-5"
+
+    @property
+    def uses_vertex(self) -> bool:
+        return bool(self.anthropic_vertex_project)
 
     @field_validator("admin_tg_ids", mode="before")
     @classmethod
