@@ -30,3 +30,6 @@ backups/
 .idea/
 .vscode/
 .DS_Store
+
+# Git bundles are used to hand work between machines; they are transport, not source.
+*.bundle
