@@ -1,7 +1,7 @@
 # Production cutover
 
 The one-time sequence that takes this repository from a laptop to a server people actually use.
-[`README.md`](../README.md#deploying-to-gcp-e2-medium) covers creating a GCP VM; everything here is
+[`README.md`](../README.md#deploying-to-a-docker-host) covers provisioning a host; everything here is
 host-agnostic and works on any box that can run Docker. What it adds beyond the README is the order
 of operations, the three steps the README leaves out — the content seed, moving existing study
 history, and handing the Telegram webhook over from the laptop — and the failure modes that are
@@ -14,7 +14,8 @@ expensive to hit.
 | `dig +short <domain>` returns the box's IP | Caddy proves domain control over HTTP before Let's Encrypt issues a certificate. Deploying against DNS that has not propagated fails, and repeated failures hit an ACME rate limit measured in hours — this is the one mistake that costs real time |
 | TCP 80, TCP 443 and **UDP 443** are open inbound | 80 for the ACME challenge and the redirect, 443 for TLS, UDP 443 for HTTP/3, which the compose file publishes |
 | Docker Engine + the compose plugin are installed | `curl -fsSL https://get.docker.com \| sudo sh`, then `sudo usermod -aG docker "$USER" && newgrp docker` |
-| ≥ 2 GB RAM, ≥ 20 GB disk | Postgres, Redis, api, worker and Caddy together idle around 1 GB; the build needs the disk |
+| ≥ 2 GB RAM **plus swap** (see the next row), ≥ 20 GB disk | Two different numbers get confused here. *Idle* is ~1 GB — Postgres, Redis, api, worker and Caddy. *Peak* is the image build: `deploy.sh` runs `docker compose build` on the server, and the Mini App stage runs `npm run build`, where Vite/esbuild is the memory spike in this stack. On a 2 GB box with no swap that peak is what gets OOM-killed, not the running stack |
+| A 2 GB swapfile exists **before the first deploy** | Hetzner CPX12 (1 vCPU, 2 GB) ships with no swap. Create it first — recovering from an OOM-killed build is slower than preventing one:<br><br>`sudo fallocate -l 2G /swapfile`<br>`sudo chmod 600 /swapfile`<br>`sudo mkswap /swapfile`<br>`sudo swapon /swapfile`<br>`echo '/swapfile none swap sw 0 0' \| sudo tee -a /etc/fstab`<br>`echo 'vm.swappiness=10' \| sudo tee /etc/sysctl.d/99-swappiness.conf`<br>`sudo sysctl -w vm.swappiness=10`<br><br>The `/etc/fstab` line makes it survive a reboot; `vm.swappiness=10` keeps the kernel using RAM in preference to swap, so swap is there for the build peak rather than slowing the steady state. Verify with `free -h` |
 
 ## 1. Clone and configure
 
@@ -60,6 +61,11 @@ imports the kana seed, then smoke-tests `/healthz` and `getWebhookInfo`. Later d
 The seed import is part of the script and upserts on natural keys, so it is safe on every deploy. It
 has to be there: migrations create tables, not content, and an empty `kana` table means a bot that
 starts a lesson and has nothing to put in it.
+
+If the build still runs out of memory even with swap, build the Mini App image on your laptop
+(`docker build -f infra/miniapp.Dockerfile -t nihongo-miniapp:local .`), push or `docker save | ssh …
+docker load` it onto the box, and deploy with `--no-pull` so the server reuses the image instead of
+rebuilding it.
 
 Then in @BotFather: `/newapp` → the bot → title, description, a 640×360 image → Web App URL
 `https://<domain>`. Without this the Mini App button has nowhere to open.

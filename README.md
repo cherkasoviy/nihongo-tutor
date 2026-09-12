@@ -150,18 +150,25 @@ Models live in `backend/app/db/models/`; every module must be imported in
 
 All learner-facing text lives in `backend/app/bot/texts_ru.py`.
 
-## Deploying to GCP (e2-medium)
+## Deploying to a Docker host
 
-One VM runs everything through docker-compose; Caddy obtains TLS certificates automatically.
-Everything below is standard Docker, so moving to another provider later is `pg_dump` + copying the
-audio volume.
+One box runs everything through docker-compose; Caddy obtains TLS certificates automatically. The
+stack is standard Docker with no provider-specific assumptions, so any VPS works.
 
-> Deploying for real, to this or any other Docker host? Follow
-> [`docs/DEPLOY.md`](docs/DEPLOY.md) instead. It is the same stack, host-agnostic, and it covers the
-> parts a first cutover needs and this section does not: handing the Telegram webhook over from a
-> development tunnel, and moving a learner's existing study history across.
+> **Deploying for real? Follow [`docs/DEPLOY.md`](docs/DEPLOY.md) instead.** This section is
+> reference material for provisioning a host. The runbook is the ordered cutover sequence, and it
+> covers what this section does not: the swapfile a 2 GB box needs before its first image build,
+> handing the Telegram webhook over from a development tunnel, and moving a learner's existing study
+> history across.
 
-### 1. Prerequisites (your side)
+Production runs on a **Hetzner CPX12** (1 vCPU, 2 GB RAM, 40 GB disk, Falkenstein, ~$14/mo including
+IPv4). The GCP recipe below is kept because it is the one that needs the extra service-account setup
+for Text-to-Speech; on any other host, skip to *Prepare the VM* and treat the earlier steps as
+"create a box and point a domain at it".
+
+### Creating the VM on GCP (optional — one recipe among many)
+
+#### 1. Prerequisites (your side)
 
 - Telegram bot token from @BotFather. After deploy: `/newapp` (or Bot Settings -> Menu Button) with
   the Mini App URL `https://<domain>`.
@@ -169,7 +176,7 @@ audio volume.
 - GCP project with billing enabled and `gcloud` installed locally.
 - Later phases: Anthropic API key, OpenAI API key, Text-to-Speech API enabled in the project.
 
-### 2. Create the VM
+#### 2. Create the VM
 
 ```bash
 export PROJECT=<gcp-project-id> ZONE=europe-west3-c REGION=europe-west3 NAME=nihongo
@@ -199,7 +206,7 @@ gcloud compute addresses describe "$NAME-ip" --region "$REGION" --format 'value(
 Create an `A` record for your domain pointing at the printed address. Wait until `dig +short
 <domain>` returns it (Caddy needs this to issue the certificate).
 
-### 3. Prepare the VM
+#### 3. Prepare the VM
 
 ```bash
 gcloud compute ssh "$NAME" --zone "$ZONE"
@@ -226,7 +233,7 @@ Fill `infra/.env`:
 
 Secrets stay in that file only; it is git-ignored.
 
-### 4. Deploy
+#### 4. Deploy
 
 ```bash
 infra/scripts/deploy.sh --no-pull
@@ -241,7 +248,7 @@ Then in @BotFather: `/newapp` -> pick the bot -> title, description, a 640x360 i
 `https://<domain>`. Send `/start` to the bot: as the id in `ADMIN_TG_IDS` you are the admin, and
 `/admin invite` produces the first invite link.
 
-### 5. Operations
+### Operations
 
 ```bash
 make compose-logs                                 # follow logs
@@ -254,8 +261,11 @@ infra/scripts/restore.sh backups/db-<stamp>.sql.gz
 Nightly backup cron (as the deploy user): `15 3 * * * /opt/nihongo-tutor/infra/scripts/backup.sh >> /var/log/nihongo-backup.log 2>&1`.
 Uncomment the `gcloud storage rsync` line in `backup.sh` to copy backups off the VM.
 
-Memory budget on 4 GB: Postgres 256 MB shared buffers, Redis capped at 192 MB, api + worker
-~300-500 MB each; the rest is headroom for Sudachi dictionaries in Phase 2.
+Memory budget on 2 GB: Postgres 256 MB shared buffers, Redis capped at 192 MB, api + worker
+~300-500 MB each — roughly 1 GB idle, which fits with room to spare. The pressure is not the running
+stack but the image build (`npm run build` under Vite), which is why
+[`docs/DEPLOY.md`](docs/DEPLOY.md) requires a swapfile before the first deploy. Phase 2's Sudachi
+dictionaries are the next thing to measure against this ceiling.
 
 ## Roadmap
 
