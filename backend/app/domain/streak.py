@@ -67,8 +67,18 @@ def session_counts(
     who spends twelve honest minutes on a heavy backlog has done the day's work even if the planner
     had queued far more steps than that. ``minutes_target`` can only lower the floor, so a learner
     who set a target below twelve minutes can still finish on time.
+
+    A session with nothing planned counts. There is no such thing as failing a day the app had
+    nothing to ask about: the learner turned up, everything they had been taught was still resting,
+    and the curriculum had nothing new to offer. Treating that as a break would punish being ahead,
+    which is the opposite of what a forgiving streak is for — and it is not an edge case while the
+    kana stage is all the content there is, because a learner who finishes it has a fortnight of
+    such days waiting. The streak still measures turning up, since it only ever advances when the
+    learner opens a session themselves.
     """
-    if planned_steps > 0 and completed_steps / planned_steps >= MIN_COMPLETION_RATIO:
+    if planned_steps == 0:
+        return True
+    if completed_steps / planned_steps >= MIN_COMPLETION_RATIO:
         return True
     return active_seconds >= min(MIN_ACTIVE_MINUTES, minutes_target) * 60
 

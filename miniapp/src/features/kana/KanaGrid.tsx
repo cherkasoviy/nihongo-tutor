@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { KanaCell, KanaScript } from '@/api/client';
-import { useKanaGrid } from '@/api/hooks';
+import { useKanaGrid, useSetKanaKnown } from '@/api/hooks';
 import { StrokeOrder } from '@/features/kana/StrokeOrder';
 
 import styles from './KanaGrid.module.css';
@@ -26,7 +26,9 @@ const KIND_LABELS: Record<string, string> = {
 export function KanaGrid() {
   const [script, setScript] = useState<KanaScript>('hiragana');
   const [selected, setSelected] = useState<KanaCell | null>(null);
+  const [placing, setPlacing] = useState(false);
   const { data, isLoading, isError } = useKanaGrid(script);
+  const setKnown = useSetKanaKnown();
 
   const groups = useMemo(() => {
     const byKind = new Map<string, KanaCell[]>();
@@ -59,9 +61,46 @@ export function KanaGrid() {
         ))}
       </nav>
 
+      <div className={styles.placeBar}>
+        <button
+          type="button"
+          className={placing ? styles.scriptActive : styles.script}
+          onClick={() => {
+            setPlacing((on) => !on);
+            setSelected(null);
+          }}
+        >
+          {placing ? 'Готово' : 'Уже знаю…'}
+        </button>
+      </div>
+
+      {placing && (
+        <p className="hint">
+          Отметь знаки, которые уже читаешь — я не буду их объяснять заново, но всё равно спрошу их
+          в ближайшие пару недель, чтобы проверить. Нажми на группу целиком или на отдельный знак.
+        </p>
+      )}
+
       {groups.map(([kind, cells]) => (
         <div key={kind} className={styles.group}>
-          <h3 className={styles.groupTitle}>{KIND_LABELS[kind] ?? kind}</h3>
+          <div className={styles.groupHead}>
+            <h3 className={styles.groupTitle}>{KIND_LABELS[kind] ?? kind}</h3>
+            {placing && (
+              <button
+                type="button"
+                className={styles.groupClaim}
+                disabled={setKnown.isPending}
+                onClick={() =>
+                  setKnown.mutate({
+                    itemIds: cells.filter((c) => !c.introduced).map((c) => c.item_id),
+                    known: true,
+                  })
+                }
+              >
+                Знаю все
+              </button>
+            )}
+          </div>
           <div className={styles.grid}>
             {cells.map((cell) => (
               <button
@@ -69,7 +108,11 @@ export function KanaGrid() {
                 type="button"
                 className={styles.cell}
                 data-state={strength(cell)}
-                onClick={() => setSelected(cell)}
+                onClick={() =>
+                  placing
+                    ? setKnown.mutate({ itemIds: [cell.item_id], known: !cell.introduced })
+                    : setSelected(cell)
+                }
                 aria-label={`${cell.char} — ${cell.cyrillic}`}
               >
                 <span className={styles.char}>{cell.char}</span>

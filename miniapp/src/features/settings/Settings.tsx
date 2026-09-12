@@ -9,6 +9,9 @@ import styles from './Settings.module.css';
 // recall is something most people fit in after the day, not before it.
 const REMINDER_HOURS = [8, 12, 18, 20, 21, 22];
 const MINUTES = [10, 15, 17, 20, 30];
+// The range the pacing sweep covered. Ten is the default; the faster end still fits the time
+// budget but makes the day-to-day load spikier.
+const PACE = [5, 8, 10, 12, 15, 20];
 const FURIGANA: { id: string; label: string }[] = [
   { id: 'always', label: 'всегда' },
   { id: 'auto', label: 'авто' },
@@ -90,6 +93,33 @@ export function Settings({ user }: { user: UserOut }) {
             {m} мин
           </button>
         ))}
+      </div>
+
+      <h3 className={styles.heading}>Новых знаков в день</h3>
+      <p className="hint">
+        Начальное число. Если повторений накопится слишком много, приложение всё равно притормозит —
+        иначе завтрашняя очередь станет неподъёмной.
+      </p>
+      <div className={styles.row}>
+        {PACE.map((n) => (
+          <button
+            key={n}
+            type="button"
+            className={n === user.daily_new_items_target ? styles.chipActive : styles.chip}
+            disabled={update.isPending}
+            onClick={() => save({ daily_new_items_target: n }, 'Темп сохранён')}
+          >
+            {n}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={user.daily_new_items_target === null ? styles.chipActive : styles.chip}
+          disabled={update.isPending}
+          onClick={() => save({ reset_new_items_target: true }, 'Вернула обычный темп')}
+        >
+          Как обычно
+        </button>
       </div>
 
       <h3 className={styles.heading}>Фуригана</h3>

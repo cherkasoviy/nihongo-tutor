@@ -9,8 +9,11 @@ with `docs/PLAN.md` and `README.md`.
 - Phase 1 scope from the roadmap is implemented except audio: FSRS wrapper, adaptive planner,
   interleaving, forgiving streak, grading, the session engine shared by bot and Mini App, the
   208-syllable kana curriculum with an idempotent importer, reminders, `/stats`, and the Mini App's
-  session runner, kana grid and progress screens.
-- Verification at hand-off: ruff / black / mypy --strict clean, 714 tests passing against Postgres 16,
+  session runner, kana grid, progress and settings screens.
+- Beyond the roadmap: a learner-settable pace, placement for syllables already known, extra practice
+  sittings, and free recall for cards that reach review state. See
+  [Deviations from PLAN.md](#deviations-from-planmd).
+- Verification at hand-off: ruff / black / mypy --strict clean, 857 tests passing against Postgres 16,
   `alembic upgrade → downgrade → upgrade → check` clean, `npm run build` clean, API boots and
   `/healthz` answers. Docker image builds were not exercised.
 - Nothing has been deployed. No GCP project or domain exist yet.
@@ -49,7 +52,10 @@ end to end:
   the plan's three-button self-grading, with Hard inferred from the reveal delay.
 - **The stop button**, which was wired to a handler but never rendered.
 
-## Decisions taken during Phase 1 that are not in PLAN.md
+## Implementation decisions not in PLAN.md
+
+How things were built, where the plan was silent. Product-level departures are in
+[Deviations from PLAN.md](#deviations-from-planmd) below.
 
 - `cards.step` was added: FSRS 6 keeps the learning-step index on the card, and without persisting it
   every restart would send a card back to its first learning step.
@@ -66,24 +72,57 @@ end to end:
   timezones, which is trivial against a pure function.
 - `.gitignore`'s blanket `data/` was narrowed: it was silently excluding `backend/data/seed/`.
 
-## Open question for the owner (worth answering before Phase 2)
+## Resolved: the kana pace (was the open question here)
 
-The plan's Phase 1 verification asks for "a simulated 30-day learner completing kana within
-12-20 min/day". The plan's own numbers cannot produce that, and the simulation in
-`tests/integration/test_learner_simulation.py` documents it:
+The plan's Phase 1 verification asked for "a simulated 30-day learner completing kana within
+12-20 min/day", and its own numbers could not produce it: `base = 5` with a `min(new + 1, 10)` nudge
+caps a kana day at **six** new syllables, which is 3-6 minutes of content and roughly 35 days for the
+syllabary.
 
-- The kana stage fixes `base = 5` new items/day, and the only upward nudge is `min(new + 1, 10)` — an
-  increment on the base, so **six** is the real ceiling, not ten.
-- Six syllables at four steps each plus the day's reviews is 25-45 steps ≈ **3-6 minutes** at the
-  planner's own 8 s/step, not 12-20.
-- 208 syllables at six a day is **~35 days**, so nobody finishes all kana inside 30. Hiragana (104),
-  which is what the bootcamp gates on, finishes around day 18.
+Answered by measurement rather than argument. A 30-day sweep across bases 5/8/10/15/20 and three
+accuracy profiles:
 
-Measured over 30 simulated days: a perfect learner reaches 177/208 syllables, an 85%-accuracy learner
-150/208, a 70% learner 102/208 — the adaptive throttle works, the sessions are just short. Raising the
-kana base (say to 12-15/day) would land sessions in the intended band and finish kana inside a month.
-That is a product decision, so the code implements the plan verbatim and the test asserts what is
-actually true.
+| base | acc | session min/mean/max | peak backlog | taught /208 | hiragana | all kana |
+|---|---|---|---|---|---|---|
+| 5 | 1.00 | 2.7 / 4.5 / 5.3 | 0.36 | 177 | day 18 | never |
+| 5 | 0.70 | 2.4 / 3.8 / 5.9 | 0.72 | **94** | never | never |
+| **10** | 1.00 | 0.4 / 5.5 / 8.4 | 0.52 | 208 | day 11 | day 21 |
+| 10 | 0.85 | 1.9 / 6.7 / 10.4 | 0.85 | 208 | day 11 | day 21 |
+| 20 | 0.85 | 0.9 / 7.0 / 16.4 | 1.19 | 208 | day 6 | day 14 |
+
+At five, a learner recalling 70% of what they see never finishes hiragana in a month. **The kana
+default is now 10 and the learner can choose up to `MAX_NEW_PER_DAY`** (`users.daily_new_items_target`,
+`/pace`, or the Mini App). `docs/PLAN.md` has been amended to match, with the reasoning, so the plan
+and the code no longer disagree on paper.
+
+The claim that "the code implements the plan verbatim" is therefore no longer true, and the
+deviations are listed below.
+
+## Deviations from PLAN.md
+
+Changes to *what the product does*, as opposed to how it is built. Every one is also written into
+`docs/PLAN.md`, so the two documents no longer disagree.
+
+- **Kana pace.** `base = 5` → `10`, and the high-retention ceiling `10` → `MAX_NEW_PER_DAY` (20).
+  Left at 10 the ceiling would have silently disabled the bump once the base reached 10. The pace is
+  a per-learner setting; the backlog gate, not a low default, is what keeps it safe.
+- **Placement.** Not in the plan at all. A learner who already reads some kana can mark syllables
+  known, by gojūon group or individually. A claim is *seeded, not skipped*: written as the state the
+  scheduler produces for two correct answers with the due date pulled into a spread window, so every
+  claim is verified within a couple of weeks instead of trusted. Two people share this curriculum
+  from opposite ends — a complete beginner and someone who reads the gojūon — and without this the
+  second one spends three weeks on a formality.
+- **A day with nothing to do counts toward the streak.** The plan does not consider the case. Once
+  everything available has been taught and nothing is due the session is empty, and turning up to
+  that is not failing it. Reachable well before Phase 2: at the current pace the syllabary finishes
+  around day 21.
+- **Extra sittings.** `learning_sessions.kind` separates the planned lesson from `practice`. The
+  plan has no notion of a second sitting; finishing the day used to mean being told to come back
+  tomorrow. Practice introduces no new items and cannot earn the streak.
+- **Free recall.** Recognition cards in `review` state use the plan's three-button self-grading
+  instead of a choice grid. The plan lists both mechanisms but does not say when each applies.
+- **One planned lesson per learner-day** is enforced by a partial unique index, which the plan does
+  not specify. A bug in the stop handler issued the day's new items twice and nothing objected.
 
 ## Local workflow reminders
 
@@ -102,5 +141,5 @@ actually true.
 > steps, the Mini App session runner with ruby furigana, pitch marks, normal/slow audio, and the admin
 > review queue. Write the Phase 2 tests listed in the plan's Verification section.
 
-Phase 2 needs from the owner: an Anthropic API key, and a decision on the kana-pace question above.
+Phase 2 needs from the owner: an Anthropic API key. The kana-pace question is settled (see above).
 Google TTS and OpenAI STT keys arrive with the audio and speaking work.

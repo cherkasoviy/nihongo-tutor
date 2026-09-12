@@ -8,6 +8,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.models import Invite, User
+from app.domain.session_planner import MAX_NEW_PER_DAY
 
 
 class TelegramAuthRequest(BaseModel):
@@ -31,6 +32,7 @@ class UserOut(BaseModel):
     timezone: str
     reminder_time: dt.time | None
     daily_minutes_target: int
+    daily_new_items_target: int | None
     furigana_mode: str
     onboarded_at: dt.datetime | None
 
@@ -103,6 +105,19 @@ class KanaCellOut(BaseModel):
     reps: int
 
 
+class PlacementIn(BaseModel):
+    """Which syllables the learner is claiming (or taking back)."""
+
+    item_ids: list[uuid.UUID] = Field(min_length=1, max_length=250)
+    known: bool = True
+
+
+class PlacementOut(BaseModel):
+    seeded: int
+    skipped_already_reviewed: int
+    cleared: int
+
+
 class SessionStepOut(BaseModel):
     id: uuid.UUID
     idx: int
@@ -151,6 +166,7 @@ class StatsOut(BaseModel):
     kana_total: int
     kana_introduced: int
     kana_known: int
+    kana_claimed: int
     due_now: int
     reviews_7d: int
     retention_7d: float | None
@@ -166,4 +182,13 @@ class SettingsIn(BaseModel):
     reminder_time: dt.time | None = None
     clear_reminder: bool = False
     daily_minutes_target: int | None = Field(default=None, ge=5, le=60)
+    daily_new_items_target: int | None = Field(
+        default=None,
+        ge=1,
+        le=MAX_NEW_PER_DAY,
+        description="New items per day. Only a starting number: the backlog gate still applies.",
+    )
+    reset_new_items_target: bool = Field(
+        default=False, description="Go back to the stage default instead of a chosen pace"
+    )
     furigana_mode: str | None = Field(default=None, pattern="^(always|auto|off)$")
