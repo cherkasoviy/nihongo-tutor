@@ -10,8 +10,9 @@ importer resolves those against whatever ids the destination happens to use. Tha
 transfer re-runnable: a learner can keep using the local instance while a server is being set up and
 the export re-applied at cutover, which a one-shot ``pg_dump`` restore into a live database cannot do.
 
-What travels: the learner's settings, their streak, every card with its full FSRS state, every review
-log, and finished sessions. What does not, and why:
+What travels: the learner's settings — including ``fsrs_params``, the personalised optimiser weights
+that only hundreds of reviews can reproduce — their streak, every card with its full FSRS state,
+every review log, and finished sessions. What does not, and why:
 
 * ``session_steps`` and ``daily_plans`` are working state for one sitting; both are rebuilt on demand,
   and an unfinished session is skipped rather than half-copied.
@@ -147,6 +148,10 @@ async def export_progress(session: AsyncSession, *, tg_user_id: int) -> dict[str
             "daily_new_items_target": user.daily_new_items_target,
             "furigana_mode": user.furigana_mode.value,
             "desired_retention": str(user.desired_retention),
+            "daily_budget_usd": str(user.daily_budget_usd),
+            # The learner's own optimised FSRS weights. Rebuildable only by re-running the optimiser
+            # over hundreds of reviews, so losing them silently costs far more than it looks.
+            "fsrs_params": user.fsrs_params,
             "onboarded_at": _iso(user.onboarded_at),
         },
         "streak": (
@@ -215,6 +220,12 @@ async def import_progress(session: AsyncSession, payload: dict[str, Any]) -> Tra
     user.daily_new_items_target = learner.get("daily_new_items_target")
     user.furigana_mode = FuriganaMode(learner["furigana_mode"])
     user.desired_retention = float(learner["desired_retention"])
+    # ``.get`` rather than ``[]``: a payload written before these two joined the block must still
+    # import, and a learner whose optimiser has never run legitimately has no weights.
+    if learner.get("daily_budget_usd") is not None:
+        user.daily_budget_usd = float(learner["daily_budget_usd"])
+    if learner.get("fsrs_params") is not None:
+        user.fsrs_params = learner["fsrs_params"]
     if learner.get("onboarded_at"):
         user.onboarded_at = dt.datetime.fromisoformat(learner["onboarded_at"])
     await session.flush()

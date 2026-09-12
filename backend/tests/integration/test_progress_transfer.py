@@ -9,6 +9,7 @@ an export and check it still lands.
 from __future__ import annotations
 
 import datetime as dt
+from typing import Any
 
 import pytest
 from sqlalchemy import func, select, text
@@ -27,6 +28,36 @@ pytestmark = pytest.mark.integration
 NOW = dt.datetime(2026, 4, 1, 9, 0, tzinfo=dt.UTC)
 
 
+# A plausible FSRS-6 weight vector: 21 floats, the shape py-fsrs hands back from an optimiser run.
+OPTIMISED_FSRS_PARAMS: dict[str, Any] = {
+    "w": [
+        0.3104,
+        1.4021,
+        2.1877,
+        9.0113,
+        6.9012,
+        0.7734,
+        1.9013,
+        0.0091,
+        1.6602,
+        0.1387,
+        1.0402,
+        2.1533,
+        0.0755,
+        0.3402,
+        1.6021,
+        0.2277,
+        3.0114,
+        0.4102,
+        0.6633,
+        0.1204,
+        0.5011,
+    ],
+    "optimised_at": "2026-09-01T00:00:00+00:00",
+    "review_count": 812,
+}
+
+
 async def _learner_with_history(sessionmaker: async_sessionmaker[AsyncSession]) -> User:
     """A learner who has actually done a lesson, so there is real FSRS state to move."""
     async with sessionmaker() as s:
@@ -43,6 +74,10 @@ async def _learner_with_history(sessionmaker: async_sessionmaker[AsyncSession]) 
         user.reminder_time = dt.time(20, 30)
         user.daily_new_items_target = 12
         user.furigana_mode = FuriganaMode.always
+        user.daily_budget_usd = 0.75
+        # What the monthly optimiser writes back (Phase 4). Nothing produces it yet, which is
+        # exactly why it is easy to forget: a null column moves correctly by accident.
+        user.fsrs_params = OPTIMISED_FSRS_PARAMS
         await s.commit()
         user_id = user.id
 
@@ -175,6 +210,10 @@ async def test_settings_streak_and_sessions_travel_too(
         assert landed.reminder_time == dt.time(20, 30), "a learner should not have to set this twice"
         assert landed.daily_new_items_target == 12
         assert landed.furigana_mode is FuriganaMode.always
+        assert float(landed.daily_budget_usd) == 0.75
+        # The expensive one. These weights take hundreds of reviews to earn back, so dropping them
+        # would be a silent, uncorrectable loss rather than a setting the learner can just re-enter.
+        assert landed.fsrs_params == OPTIMISED_FSRS_PARAMS
         streak = await s.get(Streak, landed.id)
         assert streak is not None and streak.current == expected_streak
         sessions = int(
