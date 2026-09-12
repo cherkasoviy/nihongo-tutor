@@ -1,7 +1,7 @@
 {
   "version": 1,
   "kind": "vocab",
-  "note": "Core vocabulary, tranche 1. Ordered so that anything usable in the first sittings after kana comes first. `word` uses kanji where that is the ordinary written form; `reading` is always pure kana and is what furigana and audio use. No romaji anywhere, by design.",
+  "note": "Core vocabulary, tranche 1. Ordered so that anything usable in the first sittings after kana comes first. `word` and `example.ja` use kanji where ordinary written Japanese does; `reading` and `example.reading` are always pure kana and are what furigana and audio use. No romaji anywhere, by design. `gloss_source` and `gloss_review_status` follow the `vocab_lemmas` column names in docs/PLAN.md.",
   "vocab": [
     {
       "slug": "vocab:konnichiwa",
@@ -10,10 +10,16 @@
       "gloss_ru": "здравствуйте; добрый день",
       "pos": "expression",
       "curriculum_order": 1,
-      "tags": ["greeting"],
-      "example": { "ja": "こんにちは、げんきですか。", "reading": "こんにちは、げんきですか。", "gloss_ru": "Здравствуйте, как вы?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "greeting"
+      ],
+      "example": {
+        "ja": "こんにちは、元気ですか。",
+        "reading": "こんにちは、げんきですか。",
+        "gloss_ru": "Здравствуйте, как вы?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:arigatou-gozaimasu",
@@ -22,10 +28,16 @@
       "gloss_ru": "спасибо (вежливо)",
       "pos": "expression",
       "curriculum_order": 2,
-      "tags": ["greeting"],
-      "example": { "ja": "どうもありがとうございます。", "reading": "どうもありがとうございます。", "gloss_ru": "Большое спасибо." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "greeting"
+      ],
+      "example": {
+        "ja": "どうもありがとうございます。",
+        "reading": "どうもありがとうございます。",
+        "gloss_ru": "Большое спасибо."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:hai",
@@ -34,10 +46,16 @@
       "gloss_ru": "да",
       "pos": "expression",
       "curriculum_order": 3,
-      "tags": ["core"],
-      "example": { "ja": "はい、そうです。", "reading": "はい、そうです。", "gloss_ru": "Да, это так." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "core"
+      ],
+      "example": {
+        "ja": "はい、そうです。",
+        "reading": "はい、そうです。",
+        "gloss_ru": "Да, это так."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:iie",
@@ -46,10 +64,16 @@
       "gloss_ru": "нет",
       "pos": "expression",
       "curriculum_order": 4,
-      "tags": ["core"],
-      "example": { "ja": "いいえ、ちがいます。", "reading": "いいえ、ちがいます。", "gloss_ru": "Нет, это не так." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "core"
+      ],
+      "example": {
+        "ja": "いいえ、違います。",
+        "reading": "いいえ、ちがいます。",
+        "gloss_ru": "Нет, это не так."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:sumimasen",
@@ -58,10 +82,17 @@
       "gloss_ru": "извините; простите (также «будьте добры»)",
       "pos": "expression",
       "curriculum_order": 5,
-      "tags": ["greeting", "core"],
-      "example": { "ja": "すみません、みずをください。", "reading": "すみません、みずをください。", "gloss_ru": "Извините, дайте, пожалуйста, воды." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "greeting",
+        "core"
+      ],
+      "example": {
+        "ja": "すみません、水をください。",
+        "reading": "すみません、みずをください。",
+        "gloss_ru": "Извините, дайте, пожалуйста, воды."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:ohayou-gozaimasu",
@@ -70,10 +101,16 @@
       "gloss_ru": "доброе утро (вежливо)",
       "pos": "expression",
       "curriculum_order": 6,
-      "tags": ["greeting"],
-      "example": { "ja": "おはようございます、せんせい。", "reading": "おはようございます、せんせい。", "gloss_ru": "Доброе утро, учитель." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "greeting"
+      ],
+      "example": {
+        "ja": "おはようございます、先生。",
+        "reading": "おはようございます、せんせい。",
+        "gloss_ru": "Доброе утро, учитель."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:konbanwa",
@@ -82,10 +119,16 @@
       "gloss_ru": "добрый вечер",
       "pos": "expression",
       "curriculum_order": 7,
-      "tags": ["greeting"],
-      "example": { "ja": "こんばんは、いいよるですね。", "reading": "こんばんは、いいよるですね。", "gloss_ru": "Добрый вечер, приятный вечер, правда?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "greeting"
+      ],
+      "example": {
+        "ja": "こんばんは、いい夜ですね。",
+        "reading": "こんばんは、いいよるですね。",
+        "gloss_ru": "Добрый вечер, приятный вечер, правда?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:sayounara",
@@ -94,10 +137,16 @@
       "gloss_ru": "до свидания",
       "pos": "expression",
       "curriculum_order": 8,
-      "tags": ["greeting"],
-      "example": { "ja": "さようなら、またあした。", "reading": "さようなら、またあした。", "gloss_ru": "До свидания, до завтра." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "greeting"
+      ],
+      "example": {
+        "ja": "さようなら、また明日。",
+        "reading": "さようなら、またあした。",
+        "gloss_ru": "До свидания, до завтра."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:onegaishimasu",
@@ -106,10 +155,16 @@
       "gloss_ru": "пожалуйста (при просьбе)",
       "pos": "expression",
       "curriculum_order": 9,
-      "tags": ["core"],
-      "example": { "ja": "これをおねがいします。", "reading": "これをおねがいします。", "gloss_ru": "Вот это, пожалуйста." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "core"
+      ],
+      "example": {
+        "ja": "これをお願いします。",
+        "reading": "これをおねがいします。",
+        "gloss_ru": "Вот это, пожалуйста."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:gomennasai",
@@ -118,10 +173,16 @@
       "gloss_ru": "прости(те)",
       "pos": "expression",
       "curriculum_order": 10,
-      "tags": ["greeting"],
-      "example": { "ja": "ごめんなさい、わかりません。", "reading": "ごめんなさい、わかりません。", "gloss_ru": "Простите, я не понимаю." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "greeting"
+      ],
+      "example": {
+        "ja": "ごめんなさい、分かりません。",
+        "reading": "ごめんなさい、わかりません。",
+        "gloss_ru": "Простите, я не понимаю."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:watashi",
@@ -130,10 +191,17 @@
       "gloss_ru": "я",
       "pos": "pronoun",
       "curriculum_order": 11,
-      "tags": ["people", "core"],
-      "example": { "ja": "わたしはロシアじんです。", "reading": "わたしはロシアじんです。", "gloss_ru": "Я — россиянка." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "people",
+        "core"
+      ],
+      "example": {
+        "ja": "私はロシア人です。",
+        "reading": "わたしはロシアじんです。",
+        "gloss_ru": "Я из России."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:anata",
@@ -142,10 +210,16 @@
       "gloss_ru": "ты; вы",
       "pos": "pronoun",
       "curriculum_order": 12,
-      "tags": ["people"],
-      "example": { "ja": "あなたはがくせいですか。", "reading": "あなたはがくせいですか。", "gloss_ru": "Вы студент?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "people"
+      ],
+      "example": {
+        "ja": "あなたは学生ですか。",
+        "reading": "あなたはがくせいですか。",
+        "gloss_ru": "Вы студент?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:hito",
@@ -154,10 +228,16 @@
       "gloss_ru": "человек",
       "pos": "noun",
       "curriculum_order": 13,
-      "tags": ["people"],
-      "example": { "ja": "あのひとはだれですか。", "reading": "あのひとはだれですか。", "gloss_ru": "Кто тот человек?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "people"
+      ],
+      "example": {
+        "ja": "あの人は誰ですか。",
+        "reading": "あのひとはだれですか。",
+        "gloss_ru": "Кто тот человек?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:tomodachi",
@@ -166,10 +246,16 @@
       "gloss_ru": "друг; подруга",
       "pos": "noun",
       "curriculum_order": 14,
-      "tags": ["people"],
-      "example": { "ja": "ともだちとはなします。", "reading": "ともだちとはなします。", "gloss_ru": "Я разговариваю с другом." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "people"
+      ],
+      "example": {
+        "ja": "友だちと話します。",
+        "reading": "ともだちとはなします。",
+        "gloss_ru": "Я разговариваю с другом."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:sensei",
@@ -178,10 +264,16 @@
       "gloss_ru": "учитель; преподаватель",
       "pos": "noun",
       "curriculum_order": 15,
-      "tags": ["people"],
-      "example": { "ja": "せんせいはやさしいです。", "reading": "せんせいはやさしいです。", "gloss_ru": "Учитель добрый." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "people"
+      ],
+      "example": {
+        "ja": "先生は優しいです。",
+        "reading": "せんせいはやさしいです。",
+        "gloss_ru": "Учитель добрый."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:gakusei",
@@ -190,10 +282,16 @@
       "gloss_ru": "студент; учащийся",
       "pos": "noun",
       "curriculum_order": 16,
-      "tags": ["people"],
-      "example": { "ja": "わたしはがくせいです。", "reading": "わたしはがくせいです。", "gloss_ru": "Я студентка." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "people"
+      ],
+      "example": {
+        "ja": "私は学生です。",
+        "reading": "わたしはがくせいです。",
+        "gloss_ru": "Я студент."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kodomo",
@@ -202,10 +300,17 @@
       "gloss_ru": "ребёнок",
       "pos": "noun",
       "curriculum_order": 17,
-      "tags": ["people", "family"],
-      "example": { "ja": "こどもがふたりいます。", "reading": "こどもがふたりいます。", "gloss_ru": "У меня двое детей." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "people",
+        "family"
+      ],
+      "example": {
+        "ja": "子どもが二人います。",
+        "reading": "こどもがふたりいます。",
+        "gloss_ru": "У меня двое детей."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kazoku",
@@ -214,10 +319,16 @@
       "gloss_ru": "семья",
       "pos": "noun",
       "curriculum_order": 18,
-      "tags": ["family"],
-      "example": { "ja": "かぞくはよにんです。", "reading": "かぞくはよにんです。", "gloss_ru": "В моей семье четыре человека." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "family"
+      ],
+      "example": {
+        "ja": "家族は四人です。",
+        "reading": "かぞくはよにんです。",
+        "gloss_ru": "В моей семье четыре человека."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:chichi",
@@ -226,10 +337,16 @@
       "gloss_ru": "отец (о своём)",
       "pos": "noun",
       "curriculum_order": 19,
-      "tags": ["family"],
-      "example": { "ja": "ちちはいしゃです。", "reading": "ちちはいしゃです。", "gloss_ru": "Мой отец — врач." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "family"
+      ],
+      "example": {
+        "ja": "父は医者です。",
+        "reading": "ちちはいしゃです。",
+        "gloss_ru": "Мой отец — врач."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:haha",
@@ -238,10 +355,16 @@
       "gloss_ru": "мать (о своей)",
       "pos": "noun",
       "curriculum_order": 20,
-      "tags": ["family"],
-      "example": { "ja": "ははのりょうりはおいしいです。", "reading": "ははのりょうりはおいしいです。", "gloss_ru": "Мамина еда вкусная." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "family"
+      ],
+      "example": {
+        "ja": "母の料理はおいしいです。",
+        "reading": "ははのりょうりはおいしいです。",
+        "gloss_ru": "Мамина еда вкусная."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:namae",
@@ -250,10 +373,16 @@
       "gloss_ru": "имя; название",
       "pos": "noun",
       "curriculum_order": 21,
-      "tags": ["core"],
-      "example": { "ja": "おなまえはなんですか。", "reading": "おなまえはなんですか。", "gloss_ru": "Как вас зовут?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "core"
+      ],
+      "example": {
+        "ja": "お名前は何ですか。",
+        "reading": "おなまえはなんですか。",
+        "gloss_ru": "Как вас зовут?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kuni",
@@ -262,10 +391,16 @@
       "gloss_ru": "страна; родина",
       "pos": "noun",
       "curriculum_order": 22,
-      "tags": ["core"],
-      "example": { "ja": "おくにはどこですか。", "reading": "おくにはどこですか。", "gloss_ru": "Откуда вы родом?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "core"
+      ],
+      "example": {
+        "ja": "お国はどこですか。",
+        "reading": "おくにはどこですか。",
+        "gloss_ru": "Откуда вы родом?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:nihon",
@@ -274,10 +409,16 @@
       "gloss_ru": "Япония",
       "pos": "noun",
       "curriculum_order": 23,
-      "tags": ["place"],
-      "example": { "ja": "にほんへいきたいです。", "reading": "にほんへいきたいです。", "gloss_ru": "Я хочу поехать в Японию." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "place"
+      ],
+      "example": {
+        "ja": "日本へ行きたいです。",
+        "reading": "にほんへいきたいです。",
+        "gloss_ru": "Я хочу поехать в Японию."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:nihongo",
@@ -286,10 +427,16 @@
       "gloss_ru": "японский язык",
       "pos": "noun",
       "curriculum_order": 24,
-      "tags": ["core"],
-      "example": { "ja": "にほんごをべんきょうします。", "reading": "にほんごをべんきょうします。", "gloss_ru": "Я изучаю японский язык." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "core"
+      ],
+      "example": {
+        "ja": "日本語を勉強します。",
+        "reading": "にほんごをべんきょうします。",
+        "gloss_ru": "Я изучаю японский язык."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:roshia",
@@ -298,10 +445,16 @@
       "gloss_ru": "Россия",
       "pos": "noun",
       "curriculum_order": 25,
-      "tags": ["place"],
-      "example": { "ja": "ロシアからきました。", "reading": "ロシアからきました。", "gloss_ru": "Я приехала из России." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "place"
+      ],
+      "example": {
+        "ja": "ロシアから来ました。",
+        "reading": "ロシアからきました。",
+        "gloss_ru": "Я родом из России."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:mizu",
@@ -310,10 +463,16 @@
       "gloss_ru": "вода",
       "pos": "noun",
       "curriculum_order": 26,
-      "tags": ["food"],
-      "example": { "ja": "みずをください。", "reading": "みずをください。", "gloss_ru": "Дайте, пожалуйста, воды." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "水をください。",
+        "reading": "みずをください。",
+        "gloss_ru": "Дайте, пожалуйста, воды."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:ocha",
@@ -322,10 +481,16 @@
       "gloss_ru": "чай",
       "pos": "noun",
       "curriculum_order": 27,
-      "tags": ["food"],
-      "example": { "ja": "おちゃをのみます。", "reading": "おちゃをのみます。", "gloss_ru": "Я пью чай." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "お茶を飲みます。",
+        "reading": "おちゃをのみます。",
+        "gloss_ru": "Я пью чай."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:gohan",
@@ -334,10 +499,16 @@
       "gloss_ru": "варёный рис; еда",
       "pos": "noun",
       "curriculum_order": 28,
-      "tags": ["food"],
-      "example": { "ja": "ごはんをたべます。", "reading": "ごはんをたべます。", "gloss_ru": "Я ем." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "ご飯を食べます。",
+        "reading": "ごはんをたべます。",
+        "gloss_ru": "Я ем."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:pan",
@@ -346,10 +517,16 @@
       "gloss_ru": "хлеб",
       "pos": "noun",
       "curriculum_order": 29,
-      "tags": ["food"],
-      "example": { "ja": "あさはパンをたべます。", "reading": "あさはパンをたべます。", "gloss_ru": "Утром я ем хлеб." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "朝はパンを食べます。",
+        "reading": "あさはパンをたべます。",
+        "gloss_ru": "Утром я ем хлеб."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:tamago",
@@ -358,10 +535,16 @@
       "gloss_ru": "яйцо",
       "pos": "noun",
       "curriculum_order": 30,
-      "tags": ["food"],
-      "example": { "ja": "たまごをかいました。", "reading": "たまごをかいました。", "gloss_ru": "Я купила яйца." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "卵を買います。",
+        "reading": "たまごをかいます。",
+        "gloss_ru": "Я покупаю яйца."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:sakana",
@@ -370,10 +553,16 @@
       "gloss_ru": "рыба",
       "pos": "noun",
       "curriculum_order": 31,
-      "tags": ["food"],
-      "example": { "ja": "このさかなはおいしいです。", "reading": "このさかなはおいしいです。", "gloss_ru": "Эта рыба вкусная." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "この魚はおいしいです。",
+        "reading": "このさかなはおいしいです。",
+        "gloss_ru": "Эта рыба вкусная."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:niku",
@@ -382,10 +571,16 @@
       "gloss_ru": "мясо",
       "pos": "noun",
       "curriculum_order": 32,
-      "tags": ["food"],
-      "example": { "ja": "にくはたべません。", "reading": "にくはたべません。", "gloss_ru": "Я не ем мясо." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "肉は食べません。",
+        "reading": "にくはたべません。",
+        "gloss_ru": "Я не ем мясо."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:yasai",
@@ -394,10 +589,16 @@
       "gloss_ru": "овощи",
       "pos": "noun",
       "curriculum_order": 33,
-      "tags": ["food"],
-      "example": { "ja": "やさいをたべてください。", "reading": "やさいをたべてください。", "gloss_ru": "Ешьте, пожалуйста, овощи." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "野菜を食べてください。",
+        "reading": "やさいをたべてください。",
+        "gloss_ru": "Ешьте, пожалуйста, овощи."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kudamono",
@@ -406,10 +607,16 @@
       "gloss_ru": "фрукты",
       "pos": "noun",
       "curriculum_order": 34,
-      "tags": ["food"],
-      "example": { "ja": "くだものがすきです。", "reading": "くだものがすきです。", "gloss_ru": "Я люблю фрукты." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "果物が好きです。",
+        "reading": "くだものがすきです。",
+        "gloss_ru": "Я люблю фрукты."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:ringo",
@@ -418,10 +625,16 @@
       "gloss_ru": "яблоко",
       "pos": "noun",
       "curriculum_order": 35,
-      "tags": ["food"],
-      "example": { "ja": "りんごをひとつください。", "reading": "りんごをひとつください。", "gloss_ru": "Дайте, пожалуйста, одно яблоко." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "りんごを一つください。",
+        "reading": "りんごをひとつください。",
+        "gloss_ru": "Дайте, пожалуйста, одно яблоко."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:koohii",
@@ -430,10 +643,16 @@
       "gloss_ru": "кофе",
       "pos": "noun",
       "curriculum_order": 36,
-      "tags": ["food"],
-      "example": { "ja": "コーヒーをのみませんか。", "reading": "コーヒーをのみませんか。", "gloss_ru": "Не выпить ли нам кофе?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "food"
+      ],
+      "example": {
+        "ja": "コーヒーを飲みませんか。",
+        "reading": "コーヒーをのみませんか。",
+        "gloss_ru": "Не выпить ли нам кофе?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:mise",
@@ -442,10 +661,16 @@
       "gloss_ru": "магазин; заведение",
       "pos": "noun",
       "curriculum_order": 37,
-      "tags": ["place"],
-      "example": { "ja": "このみせはやすいです。", "reading": "このみせはやすいです。", "gloss_ru": "В этом магазине дёшево." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "place"
+      ],
+      "example": {
+        "ja": "この店は安いです。",
+        "reading": "このみせはやすいです。",
+        "gloss_ru": "В этом магазине дёшево."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:ie",
@@ -454,10 +679,16 @@
       "gloss_ru": "дом",
       "pos": "noun",
       "curriculum_order": 38,
-      "tags": ["place"],
-      "example": { "ja": "いえにかえります。", "reading": "いえにかえります。", "gloss_ru": "Я возвращаюсь домой." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "place"
+      ],
+      "example": {
+        "ja": "家に帰ります。",
+        "reading": "いえにかえります。",
+        "gloss_ru": "Я возвращаюсь домой."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:gakkou",
@@ -466,10 +697,16 @@
       "gloss_ru": "школа",
       "pos": "noun",
       "curriculum_order": 39,
-      "tags": ["place"],
-      "example": { "ja": "がっこうへいきます。", "reading": "がっこうへいきます。", "gloss_ru": "Я иду в школу." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "place"
+      ],
+      "example": {
+        "ja": "学校へ行きます。",
+        "reading": "がっこうへいきます。",
+        "gloss_ru": "Я иду в школу."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:eki",
@@ -478,10 +715,16 @@
       "gloss_ru": "станция; вокзал",
       "pos": "noun",
       "curriculum_order": 40,
-      "tags": ["place"],
-      "example": { "ja": "えきはどこですか。", "reading": "えきはどこですか。", "gloss_ru": "Где станция?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "place"
+      ],
+      "example": {
+        "ja": "駅はどこですか。",
+        "reading": "えきはどこですか。",
+        "gloss_ru": "Где станция?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:machi",
@@ -490,10 +733,16 @@
       "gloss_ru": "город; городок",
       "pos": "noun",
       "curriculum_order": 41,
-      "tags": ["place"],
-      "example": { "ja": "このまちはしずかです。", "reading": "このまちはしずかです。", "gloss_ru": "Этот город тихий." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "place"
+      ],
+      "example": {
+        "ja": "この町は静かです。",
+        "reading": "このまちはしずかです。",
+        "gloss_ru": "Этот город тихий."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:heya",
@@ -502,10 +751,16 @@
       "gloss_ru": "комната",
       "pos": "noun",
       "curriculum_order": 42,
-      "tags": ["place"],
-      "example": { "ja": "へやがひろいです。", "reading": "へやがひろいです。", "gloss_ru": "Комната просторная." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "place"
+      ],
+      "example": {
+        "ja": "部屋が広いです。",
+        "reading": "へやがひろいです。",
+        "gloss_ru": "Комната просторная."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:toire",
@@ -514,10 +769,16 @@
       "gloss_ru": "туалет",
       "pos": "noun",
       "curriculum_order": 43,
-      "tags": ["place"],
-      "example": { "ja": "トイレはどこですか。", "reading": "トイレはどこですか。", "gloss_ru": "Где туалет?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "place"
+      ],
+      "example": {
+        "ja": "トイレはどこですか。",
+        "reading": "トイレはどこですか。",
+        "gloss_ru": "Где туалет?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kuruma",
@@ -526,10 +787,16 @@
       "gloss_ru": "машина; автомобиль",
       "pos": "noun",
       "curriculum_order": 44,
-      "tags": ["transport"],
-      "example": { "ja": "くるまでいきます。", "reading": "くるまでいきます。", "gloss_ru": "Я поеду на машине." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "transport"
+      ],
+      "example": {
+        "ja": "車で行きます。",
+        "reading": "くるまでいきます。",
+        "gloss_ru": "Я поеду на машине."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:densha",
@@ -538,10 +805,16 @@
       "gloss_ru": "электричка; поезд",
       "pos": "noun",
       "curriculum_order": 45,
-      "tags": ["transport"],
-      "example": { "ja": "でんしゃにのります。", "reading": "でんしゃにのります。", "gloss_ru": "Я сажусь на поезд." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "transport"
+      ],
+      "example": {
+        "ja": "電車に乗ります。",
+        "reading": "でんしゃにのります。",
+        "gloss_ru": "Я сажусь на поезд."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:hon",
@@ -550,10 +823,16 @@
       "gloss_ru": "книга",
       "pos": "noun",
       "curriculum_order": 46,
-      "tags": ["object"],
-      "example": { "ja": "ほんをよみます。", "reading": "ほんをよみます。", "gloss_ru": "Я читаю книгу." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "object"
+      ],
+      "example": {
+        "ja": "本を読みます。",
+        "reading": "ほんをよみます。",
+        "gloss_ru": "Я читаю книгу."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:neko",
@@ -562,10 +841,16 @@
       "gloss_ru": "кошка",
       "pos": "noun",
       "curriculum_order": 47,
-      "tags": ["animal"],
-      "example": { "ja": "ねこがすきです。", "reading": "ねこがすきです。", "gloss_ru": "Я люблю кошек." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "animal"
+      ],
+      "example": {
+        "ja": "猫が好きです。",
+        "reading": "ねこがすきです。",
+        "gloss_ru": "Я люблю кошек."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:inu",
@@ -574,10 +859,16 @@
       "gloss_ru": "собака",
       "pos": "noun",
       "curriculum_order": 48,
-      "tags": ["animal"],
-      "example": { "ja": "いぬはおおきいです。", "reading": "いぬはおおきいです。", "gloss_ru": "Собака большая." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "animal"
+      ],
+      "example": {
+        "ja": "犬は大きいです。",
+        "reading": "いぬはおおきいです。",
+        "gloss_ru": "Собака большая."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kyou",
@@ -586,10 +877,16 @@
       "gloss_ru": "сегодня",
       "pos": "noun",
       "curriculum_order": 49,
-      "tags": ["time"],
-      "example": { "ja": "きょうはあついです。", "reading": "きょうはあついです。", "gloss_ru": "Сегодня жарко." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "time"
+      ],
+      "example": {
+        "ja": "今日は暑いです。",
+        "reading": "きょうはあついです。",
+        "gloss_ru": "Сегодня жарко."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:ashita",
@@ -598,10 +895,16 @@
       "gloss_ru": "завтра",
       "pos": "noun",
       "curriculum_order": 50,
-      "tags": ["time"],
-      "example": { "ja": "あしたあいましょう。", "reading": "あしたあいましょう。", "gloss_ru": "Давайте встретимся завтра." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "time"
+      ],
+      "example": {
+        "ja": "明日会いましょう。",
+        "reading": "あしたあいましょう。",
+        "gloss_ru": "Давайте встретимся завтра."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kinou",
@@ -610,10 +913,16 @@
       "gloss_ru": "вчера",
       "pos": "noun",
       "curriculum_order": 51,
-      "tags": ["time"],
-      "example": { "ja": "きのうはやすみでした。", "reading": "きのうはやすみでした。", "gloss_ru": "Вчера был выходной." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "time"
+      ],
+      "example": {
+        "ja": "昨日は休みでした。",
+        "reading": "きのうはやすみでした。",
+        "gloss_ru": "Вчера был выходной."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:ima",
@@ -622,10 +931,16 @@
       "gloss_ru": "сейчас",
       "pos": "noun",
       "curriculum_order": 52,
-      "tags": ["time"],
-      "example": { "ja": "いまなんじですか。", "reading": "いまなんじですか。", "gloss_ru": "Который сейчас час?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "time"
+      ],
+      "example": {
+        "ja": "今何時ですか。",
+        "reading": "いまなんじですか。",
+        "gloss_ru": "Который сейчас час?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:asa",
@@ -634,10 +949,16 @@
       "gloss_ru": "утро",
       "pos": "noun",
       "curriculum_order": 53,
-      "tags": ["time"],
-      "example": { "ja": "あさはやくおきます。", "reading": "あさはやくおきます。", "gloss_ru": "Я встаю рано утром." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "time"
+      ],
+      "example": {
+        "ja": "朝早く起きます。",
+        "reading": "あさはやくおきます。",
+        "gloss_ru": "Я встаю рано утром."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:hiru",
@@ -646,10 +967,16 @@
       "gloss_ru": "день; полдень",
       "pos": "noun",
       "curriculum_order": 54,
-      "tags": ["time"],
-      "example": { "ja": "ひるごはんをたべます。", "reading": "ひるごはんをたべます。", "gloss_ru": "Я обедаю." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "time"
+      ],
+      "example": {
+        "ja": "昼ご飯を食べます。",
+        "reading": "ひるごはんをたべます。",
+        "gloss_ru": "Я обедаю."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:yoru",
@@ -658,10 +985,16 @@
       "gloss_ru": "ночь; вечер",
       "pos": "noun",
       "curriculum_order": 55,
-      "tags": ["time"],
-      "example": { "ja": "よるはさむいです。", "reading": "よるはさむいです。", "gloss_ru": "Ночью холодно." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "time"
+      ],
+      "example": {
+        "ja": "夜は寒いです。",
+        "reading": "よるはさむいです。",
+        "gloss_ru": "Ночью холодно."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:jikan",
@@ -670,10 +1003,16 @@
       "gloss_ru": "время; час (продолжительность)",
       "pos": "noun",
       "curriculum_order": 56,
-      "tags": ["time"],
-      "example": { "ja": "じかんがありません。", "reading": "じかんがありません。", "gloss_ru": "У меня нет времени." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "time"
+      ],
+      "example": {
+        "ja": "時間がありません。",
+        "reading": "じかんがありません。",
+        "gloss_ru": "У меня нет времени."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:mainichi",
@@ -682,10 +1021,16 @@
       "gloss_ru": "каждый день",
       "pos": "noun",
       "curriculum_order": 57,
-      "tags": ["time"],
-      "example": { "ja": "まいにちべんきょうします。", "reading": "まいにちべんきょうします。", "gloss_ru": "Я занимаюсь каждый день." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "time"
+      ],
+      "example": {
+        "ja": "毎日勉強します。",
+        "reading": "まいにちべんきょうします。",
+        "gloss_ru": "Я занимаюсь каждый день."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:shuumatsu",
@@ -694,10 +1039,16 @@
       "gloss_ru": "выходные",
       "pos": "noun",
       "curriculum_order": 58,
-      "tags": ["time"],
-      "example": { "ja": "しゅうまつはひまです。", "reading": "しゅうまつはひまです。", "gloss_ru": "На выходных я свободна." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "time"
+      ],
+      "example": {
+        "ja": "週末は暇です。",
+        "reading": "しゅうまつはひまです。",
+        "gloss_ru": "На выходных у меня есть свободное время."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:taberu",
@@ -706,10 +1057,16 @@
       "gloss_ru": "есть; кушать",
       "pos": "verb",
       "curriculum_order": 59,
-      "tags": ["verb"],
-      "example": { "ja": "あさごはんをたべます。", "reading": "あさごはんをたべます。", "gloss_ru": "Я завтракаю." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "朝ご飯を食べます。",
+        "reading": "あさごはんをたべます。",
+        "gloss_ru": "Я завтракаю."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:nomu",
@@ -718,10 +1075,16 @@
       "gloss_ru": "пить",
       "pos": "verb",
       "curriculum_order": 60,
-      "tags": ["verb"],
-      "example": { "ja": "みずをのみます。", "reading": "みずをのみます。", "gloss_ru": "Я пью воду." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "水を飲みます。",
+        "reading": "みずをのみます。",
+        "gloss_ru": "Я пью воду."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:miru",
@@ -730,10 +1093,16 @@
       "gloss_ru": "смотреть; видеть",
       "pos": "verb",
       "curriculum_order": 61,
-      "tags": ["verb"],
-      "example": { "ja": "えいがをみます。", "reading": "えいがをみます。", "gloss_ru": "Я смотрю фильм." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "映画を見ます。",
+        "reading": "えいがをみます。",
+        "gloss_ru": "Я смотрю фильм."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kiku",
@@ -742,10 +1111,16 @@
       "gloss_ru": "слушать; спрашивать",
       "pos": "verb",
       "curriculum_order": 62,
-      "tags": ["verb"],
-      "example": { "ja": "おんがくをききます。", "reading": "おんがくをききます。", "gloss_ru": "Я слушаю музыку." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "音楽を聞きます。",
+        "reading": "おんがくをききます。",
+        "gloss_ru": "Я слушаю музыку."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:iku",
@@ -754,10 +1129,16 @@
       "gloss_ru": "идти; ехать",
       "pos": "verb",
       "curriculum_order": 63,
-      "tags": ["verb"],
-      "example": { "ja": "がっこうへいきます。", "reading": "がっこうへいきます。", "gloss_ru": "Я иду в школу." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "毎日学校へ行きます。",
+        "reading": "まいにちがっこうへいきます。",
+        "gloss_ru": "Я каждый день хожу в школу."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kuru",
@@ -766,10 +1147,16 @@
       "gloss_ru": "приходить; приезжать",
       "pos": "verb",
       "curriculum_order": 64,
-      "tags": ["verb"],
-      "example": { "ja": "ともだちがきます。", "reading": "ともだちがきます。", "gloss_ru": "Придёт подруга." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "友だちが来ます。",
+        "reading": "ともだちがきます。",
+        "gloss_ru": "Придёт друг."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kaeru",
@@ -778,10 +1165,16 @@
       "gloss_ru": "возвращаться (домой)",
       "pos": "verb",
       "curriculum_order": 65,
-      "tags": ["verb"],
-      "example": { "ja": "うちへかえります。", "reading": "うちへかえります。", "gloss_ru": "Я возвращаюсь домой." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "うちへ帰ります。",
+        "reading": "うちへかえります。",
+        "gloss_ru": "Я возвращаюсь домой."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:suru",
@@ -790,10 +1183,16 @@
       "gloss_ru": "делать",
       "pos": "verb",
       "curriculum_order": 66,
-      "tags": ["verb"],
-      "example": { "ja": "しごとをします。", "reading": "しごとをします。", "gloss_ru": "Я работаю." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "仕事をします。",
+        "reading": "しごとをします。",
+        "gloss_ru": "Я работаю."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:hanasu",
@@ -802,10 +1201,16 @@
       "gloss_ru": "говорить; разговаривать",
       "pos": "verb",
       "curriculum_order": 67,
-      "tags": ["verb"],
-      "example": { "ja": "にほんごをはなします。", "reading": "にほんごをはなします。", "gloss_ru": "Я говорю по-японски." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "日本語を話します。",
+        "reading": "にほんごをはなします。",
+        "gloss_ru": "Я говорю по-японски."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:yomu",
@@ -814,10 +1219,16 @@
       "gloss_ru": "читать",
       "pos": "verb",
       "curriculum_order": 68,
-      "tags": ["verb"],
-      "example": { "ja": "ほんをよみます。", "reading": "ほんをよみます。", "gloss_ru": "Я читаю книгу." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "夜、本を読みます。",
+        "reading": "よる、ほんをよみます。",
+        "gloss_ru": "Вечером я читаю книгу."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kaku",
@@ -826,10 +1237,16 @@
       "gloss_ru": "писать",
       "pos": "verb",
       "curriculum_order": 69,
-      "tags": ["verb"],
-      "example": { "ja": "なまえをかいてください。", "reading": "なまえをかいてください。", "gloss_ru": "Напишите, пожалуйста, имя." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "名前を書いてください。",
+        "reading": "なまえをかいてください。",
+        "gloss_ru": "Напишите, пожалуйста, имя."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:neru",
@@ -838,10 +1255,16 @@
       "gloss_ru": "спать; ложиться спать",
       "pos": "verb",
       "curriculum_order": 70,
-      "tags": ["verb"],
-      "example": { "ja": "はやくねます。", "reading": "はやくねます。", "gloss_ru": "Я рано ложусь спать." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "早く寝ます。",
+        "reading": "はやくねます。",
+        "gloss_ru": "Я рано ложусь спать."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:okiru",
@@ -850,10 +1273,16 @@
       "gloss_ru": "вставать; просыпаться",
       "pos": "verb",
       "curriculum_order": 71,
-      "tags": ["verb"],
-      "example": { "ja": "ろくじにおきます。", "reading": "ろくじにおきます。", "gloss_ru": "Я встаю в шесть часов." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "六時に起きます。",
+        "reading": "ろくじにおきます。",
+        "gloss_ru": "Я встаю в шесть часов."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:kau",
@@ -862,10 +1291,16 @@
       "gloss_ru": "покупать",
       "pos": "verb",
       "curriculum_order": 72,
-      "tags": ["verb"],
-      "example": { "ja": "パンをかいます。", "reading": "パンをかいます。", "gloss_ru": "Я покупаю хлеб." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "パンを買います。",
+        "reading": "パンをかいます。",
+        "gloss_ru": "Я покупаю хлеб."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:wakaru",
@@ -874,10 +1309,16 @@
       "gloss_ru": "понимать",
       "pos": "verb",
       "curriculum_order": 73,
-      "tags": ["verb"],
-      "example": { "ja": "よくわかりました。", "reading": "よくわかりました。", "gloss_ru": "Я хорошо поняла." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "よく分かりました。",
+        "reading": "よくわかりました。",
+        "gloss_ru": "Теперь мне всё понятно."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:aru",
@@ -886,10 +1327,16 @@
       "gloss_ru": "быть; иметься (о неодушевлённом)",
       "pos": "verb",
       "curriculum_order": 74,
-      "tags": ["verb"],
-      "example": { "ja": "つくえのうえにほんがあります。", "reading": "つくえのうえにほんがあります。", "gloss_ru": "На столе лежит книга." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "机の上に本があります。",
+        "reading": "つくえのうえにほんがあります。",
+        "gloss_ru": "На столе лежит книга."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:iru",
@@ -898,10 +1345,16 @@
       "gloss_ru": "быть; находиться (о живом)",
       "pos": "verb",
       "curriculum_order": 75,
-      "tags": ["verb"],
-      "example": { "ja": "へやにねこがいます。", "reading": "へやにねこがいます。", "gloss_ru": "В комнате кошка." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "部屋に猫がいます。",
+        "reading": "へやにねこがいます。",
+        "gloss_ru": "В комнате кошка."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:benkyou-suru",
@@ -910,10 +1363,16 @@
       "gloss_ru": "учиться; заниматься",
       "pos": "verb",
       "curriculum_order": 76,
-      "tags": ["verb"],
-      "example": { "ja": "まいにちにほんごをべんきょうします。", "reading": "まいにちにほんごをべんきょうします。", "gloss_ru": "Я каждый день занимаюсь японским." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "verb"
+      ],
+      "example": {
+        "ja": "毎日日本語を勉強します。",
+        "reading": "まいにちにほんごをべんきょうします。",
+        "gloss_ru": "Я каждый день занимаюсь японским."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:ookii",
@@ -922,10 +1381,16 @@
       "gloss_ru": "большой",
       "pos": "adjective",
       "curriculum_order": 77,
-      "tags": ["adjective"],
-      "example": { "ja": "おおきいいえですね。", "reading": "おおきいいえですね。", "gloss_ru": "Большой дом, правда?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective"
+      ],
+      "example": {
+        "ja": "大きい家ですね。",
+        "reading": "おおきいいえですね。",
+        "gloss_ru": "Большой дом, правда?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:chiisai",
@@ -934,10 +1399,16 @@
       "gloss_ru": "маленький",
       "pos": "adjective",
       "curriculum_order": 78,
-      "tags": ["adjective"],
-      "example": { "ja": "ちいさいねこがいます。", "reading": "ちいさいねこがいます。", "gloss_ru": "Здесь маленькая кошка." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective"
+      ],
+      "example": {
+        "ja": "小さい猫がいます。",
+        "reading": "ちいさいねこがいます。",
+        "gloss_ru": "Здесь маленькая кошка."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:atarashii",
@@ -946,10 +1417,16 @@
       "gloss_ru": "новый",
       "pos": "adjective",
       "curriculum_order": 79,
-      "tags": ["adjective"],
-      "example": { "ja": "あたらしいくるまをかいました。", "reading": "あたらしいくるまをかいました。", "gloss_ru": "Я купила новую машину." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective"
+      ],
+      "example": {
+        "ja": "新しい車を買います。",
+        "reading": "あたらしいくるまをかいます。",
+        "gloss_ru": "Я покупаю новую машину."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:furui",
@@ -958,10 +1435,16 @@
       "gloss_ru": "старый (о вещах)",
       "pos": "adjective",
       "curriculum_order": 80,
-      "tags": ["adjective"],
-      "example": { "ja": "このほんはふるいです。", "reading": "このほんはふるいです。", "gloss_ru": "Эта книга старая." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective"
+      ],
+      "example": {
+        "ja": "この本は古いです。",
+        "reading": "このほんはふるいです。",
+        "gloss_ru": "Эта книга старая."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:takai",
@@ -970,10 +1453,16 @@
       "gloss_ru": "дорогой; высокий",
       "pos": "adjective",
       "curriculum_order": 81,
-      "tags": ["adjective"],
-      "example": { "ja": "このみせはたかいです。", "reading": "このみせはたかいです。", "gloss_ru": "В этом магазине дорого." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective"
+      ],
+      "example": {
+        "ja": "この店は高いです。",
+        "reading": "このみせはたかいです。",
+        "gloss_ru": "В этом магазине дорого."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:yasui",
@@ -982,10 +1471,16 @@
       "gloss_ru": "дешёвый",
       "pos": "adjective",
       "curriculum_order": 82,
-      "tags": ["adjective"],
-      "example": { "ja": "やすいパンをかいます。", "reading": "やすいパンをかいます。", "gloss_ru": "Я куплю дешёвый хлеб." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective"
+      ],
+      "example": {
+        "ja": "安いパンを買います。",
+        "reading": "やすいパンをかいます。",
+        "gloss_ru": "Я покупаю дешёвый хлеб."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:oishii",
@@ -994,10 +1489,17 @@
       "gloss_ru": "вкусный",
       "pos": "adjective",
       "curriculum_order": 83,
-      "tags": ["adjective", "food"],
-      "example": { "ja": "このおちゃはおいしいです。", "reading": "このおちゃはおいしいです。", "gloss_ru": "Этот чай вкусный." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective",
+        "food"
+      ],
+      "example": {
+        "ja": "このお茶はおいしいです。",
+        "reading": "このおちゃはおいしいです。",
+        "gloss_ru": "Этот чай вкусный."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:atsui",
@@ -1006,10 +1508,17 @@
       "gloss_ru": "жаркий (о погоде)",
       "pos": "adjective",
       "curriculum_order": 84,
-      "tags": ["adjective", "weather"],
-      "example": { "ja": "なつはあついです。", "reading": "なつはあついです。", "gloss_ru": "Летом жарко." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective",
+        "weather"
+      ],
+      "example": {
+        "ja": "夏は暑いです。",
+        "reading": "なつはあついです。",
+        "gloss_ru": "Летом жарко."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:samui",
@@ -1018,10 +1527,17 @@
       "gloss_ru": "холодный (о погоде)",
       "pos": "adjective",
       "curriculum_order": 85,
-      "tags": ["adjective", "weather"],
-      "example": { "ja": "ふゆはとてもさむいです。", "reading": "ふゆはとてもさむいです。", "gloss_ru": "Зимой очень холодно." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective",
+        "weather"
+      ],
+      "example": {
+        "ja": "冬はとても寒いです。",
+        "reading": "ふゆはとてもさむいです。",
+        "gloss_ru": "Зимой очень холодно."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:ii",
@@ -1030,10 +1546,16 @@
       "gloss_ru": "хороший",
       "pos": "adjective",
       "curriculum_order": 86,
-      "tags": ["adjective"],
-      "example": { "ja": "いいてんきですね。", "reading": "いいてんきですね。", "gloss_ru": "Хорошая погода, правда?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective"
+      ],
+      "example": {
+        "ja": "いい天気ですね。",
+        "reading": "いいてんきですね。",
+        "gloss_ru": "Хорошая погода, правда?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:tanoshii",
@@ -1042,10 +1564,16 @@
       "gloss_ru": "весёлый; приятный",
       "pos": "adjective",
       "curriculum_order": 87,
-      "tags": ["adjective"],
-      "example": { "ja": "にほんごはたのしいです。", "reading": "にほんごはたのしいです。", "gloss_ru": "Японский язык — это интересно." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective"
+      ],
+      "example": {
+        "ja": "日本語は楽しいです。",
+        "reading": "にほんごはたのしいです。",
+        "gloss_ru": "Японский язык — это интересно."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:muzukashii",
@@ -1054,10 +1582,16 @@
       "gloss_ru": "трудный; сложный",
       "pos": "adjective",
       "curriculum_order": 88,
-      "tags": ["adjective"],
-      "example": { "ja": "かんじはむずかしいです。", "reading": "かんじはむずかしいです。", "gloss_ru": "Иероглифы трудные." },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "adjective"
+      ],
+      "example": {
+        "ja": "漢字は難しいです。",
+        "reading": "かんじはむずかしいです。",
+        "gloss_ru": "Иероглифы трудные."
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:nani",
@@ -1066,10 +1600,16 @@
       "gloss_ru": "что",
       "pos": "pronoun",
       "curriculum_order": 89,
-      "tags": ["question"],
-      "example": { "ja": "これはなんですか。", "reading": "これはなんですか。", "gloss_ru": "Что это?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "question"
+      ],
+      "example": {
+        "ja": "これは何ですか。",
+        "reading": "これはなんですか。",
+        "gloss_ru": "Что это?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:dare",
@@ -1078,10 +1618,16 @@
       "gloss_ru": "кто",
       "pos": "pronoun",
       "curriculum_order": 90,
-      "tags": ["question"],
-      "example": { "ja": "あのひとはだれですか。", "reading": "あのひとはだれですか。", "gloss_ru": "Кто тот человек?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "question"
+      ],
+      "example": {
+        "ja": "これは誰の本ですか。",
+        "reading": "これはだれのほんですか。",
+        "gloss_ru": "Чья это книга?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:doko",
@@ -1090,10 +1636,16 @@
       "gloss_ru": "где; куда",
       "pos": "pronoun",
       "curriculum_order": 91,
-      "tags": ["question"],
-      "example": { "ja": "えきはどこですか。", "reading": "えきはどこですか。", "gloss_ru": "Где станция?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "question"
+      ],
+      "example": {
+        "ja": "あなたの家はどこですか。",
+        "reading": "あなたのいえはどこですか。",
+        "gloss_ru": "Где твой дом?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:itsu",
@@ -1102,10 +1654,16 @@
       "gloss_ru": "когда",
       "pos": "pronoun",
       "curriculum_order": 92,
-      "tags": ["question"],
-      "example": { "ja": "いつきますか。", "reading": "いつきますか。", "gloss_ru": "Когда вы придёте?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "question"
+      ],
+      "example": {
+        "ja": "いつ来ますか。",
+        "reading": "いつきますか。",
+        "gloss_ru": "Когда вы придёте?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     },
     {
       "slug": "vocab:ikura",
@@ -1114,10 +1672,16 @@
       "gloss_ru": "сколько (о цене)",
       "pos": "pronoun",
       "curriculum_order": 93,
-      "tags": ["question"],
-      "example": { "ja": "これはいくらですか。", "reading": "これはいくらですか。", "gloss_ru": "Сколько это стоит?" },
-      "source": "claude-session",
-      "reviewed": false
+      "tags": [
+        "question"
+      ],
+      "example": {
+        "ja": "これはいくらですか。",
+        "reading": "これはいくらですか。",
+        "gloss_ru": "Сколько это стоит?"
+      },
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
     }
   ]
 }
