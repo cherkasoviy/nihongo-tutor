@@ -156,6 +156,11 @@ One VM runs everything through docker-compose; Caddy obtains TLS certificates au
 Everything below is standard Docker, so moving to another provider later is `pg_dump` + copying the
 audio volume.
 
+> Deploying for real, to this or any other Docker host? Follow
+> [`docs/DEPLOY.md`](docs/DEPLOY.md) instead. It is the same stack, host-agnostic, and it covers the
+> parts a first cutover needs and this section does not: handing the Telegram webhook over from a
+> development tunnel, and moving a learner's existing study history across.
+
 ### 1. Prerequisites (your side)
 
 - Telegram bot token from @BotFather. After deploy: `/newapp` (or Bot Settings -> Menu Button) with
