@@ -15,14 +15,14 @@ Igor wants a pet project to help his girlfriend learn Japanese. It lives in this
 | Platform | Telegram bot (habit loop, reviews, voice) + Telegram Mini App (rich UI: furigana, kana grid, stats, dialogues) |
 | Stack | Python 3.12 + FastAPI + SQLAlchemy 2 async + Alembic + Postgres 16; aiogram 3 (webhook mode); arq + Redis for jobs; React 18 + TS + Vite Mini App; uv; docker-compose + Caddy |
 | Hosting | **GCP `e2-medium`** (2 vCPU, 4 GB, 30 GB disk, `europe-west3`/`europe-north1`), Ubuntu 24.04 + Docker. Single vendor with the TTS API; TTS auth via the VM's attached service account (no JSON key on disk). Reevaluate after the $300 credit; nothing in the plan is GCP-specific, so a move to Hetzner is a `pg_dump` + audio volume copy |
-| AI | Claude API (content generation, roleplay, corrections); Google Cloud TTS; OpenAI transcription for STT |
+| AI | Claude via **Google Vertex AI** (content generation, roleplay, corrections); Google Cloud TTS; **Google Cloud Speech-to-Text v2** for STT. *Changed from the direct Anthropic API and OpenAI transcription*: direct Anthropic billing is not available to the owner, and neither is OpenAI's. Vertex authenticates with the same Google service account as TTS/STT (`roles/aiplatform.user`), so **no Anthropic API key exists anywhere in the system**. STT v2 gives 60 min/month free, takes `OGG_OPUS` natively, and its PhraseSet adaptation replaces the `prompt=<target sentence>` trick |
 | Users | Multi-user from day one, invite-only, per-user daily AI budget, admin role |
 | Curriculum | App is the main path: kana bootcamp, then frequency-based core vocab + N5 grammar in usage order, inside conversational scenarios. Real kanji with furigana toggle from day one, **no romaji rendered anywhere** |
 
 ### Prerequisites before deployment (user's side)
 
 1. Telegram bot token from BotFather; enable the Mini App (`/newapp`) and set the domain.
-2. Keys: Anthropic API key, OpenAI API key (STT), Google Cloud service account with Text-to-Speech enabled.
+2. One Google Cloud project with billing enabled, the Vertex AI, Text-to-Speech and Speech-to-Text APIs turned on, and a service account holding `roles/aiplatform.user` plus the TTS/STT roles. That single credential covers all three; no Anthropic or OpenAI key is needed.
 3. GCP project with billing (credit) enabled, `e2-medium` VM with a static IP, a service account (Text-to-Speech role) attached to the VM, and a domain pointing at it (Caddy needs a public hostname for TLS + webhook). Secrets go only in `.env` on the server, never in the repo.
 
 ### Glossary
@@ -57,9 +57,9 @@ Igor wants a pet project to help his girlfriend learn Japanese. It lives in this
 | Jobs | arq + Redis worker; reminder tick is a cron every minute | Survives restarts, fans out TTS/STT/batch polling; per-user scheduled jobs would drift |
 | SRS | `fsrs` (py-fsrs) `Scheduler/Card/Rating/ReviewLog`; `fsrs[optimizer]` only in an offline script | Optimizer pulls torch; run monthly offline |
 | Morphology | `sudachipy` + `sudachidict_core`, `jaconv` for kana normalization; pitch from Kanjium accent file | Lemma + reading per token for validation and i+1 queries |
-| LLM | `anthropic` 1.x. `MODEL_STRONG=claude-opus-5`, `MODEL_FAST=claude-opus-5` with `output_config.effort="low"` for chat turns. `claude-sonnet-5` is an opt-in config value for `MODEL_FAST` after the user evaluates quality | Japanese naturalness and Russian explanation quality are where cheaper models slip; Batch API keeps offline generation cheap regardless |
+| LLM | `anthropic` 1.x via `AsyncAnthropicVertex` (install `anthropic[vertex]`). `MODEL_STRONG=claude-opus-5`, `MODEL_FAST=claude-opus-5` with `output_config.effort="low"` for chat turns. `claude-sonnet-5` is an opt-in config value for `MODEL_FAST` after the user evaluates quality | Japanese naturalness and Russian explanation quality are where cheaper models slip. **Two things Vertex does not carry** — see the SDK rules below: server-side `fallbacks`, and the Message Batches API, so offline generation pays full price rather than the 50% batch rate |
 | TTS | Google Cloud Text-to-Speech, `ja-JP-Neural2-B/C/D` (Chirp3-HD optional for dialogues), SSML `prosody rate` for the slow variant, native `OGG_OPUS` output | 1M chars/month free tier, Telegram-ready format, word timepoints. Azure Neural is a close second; OpenAI TTS lacks SSML; ElevenLabs is 10-20x the price |
-| STT | OpenAI `gpt-4o-transcribe` (`whisper-1` fallback), `language="ja"`, `prompt=<target sentence>` | Accepts OGG/Opus directly; prompt biases toward the expected phrase. Reject clips <1 s (hallucination) and >20 s |
+| STT | Google Cloud Speech-to-Text v2, `language_codes=["ja-JP"]`, a PhraseSet holding the target sentence's words | Accepts `OGG_OPUS` natively, so no transcode; adaptation biases toward the expected phrase the way OpenAI's `prompt` did. 60 min/month free, and the same service account as TTS and Vertex. Reject clips <1 s (hallucination) and >20 s |
 | Mini App | React 18, TS, Vite, `@telegram-apps/sdk-react`, TanStack Query, zustand, CSS modules; API client generated with openapi-typescript | |
 | Deploy | docker-compose: caddy (TLS, static Mini App, `/api`, `/tg/webhook`, `/audio`), api, worker, postgres, redis; nightly `pg_dump` | |
 
@@ -167,12 +167,17 @@ The safety rail is the backlog gate, not a low base: the sweep shows it zeroing 
 
 | Task | Model | Mode |
 |---|---|---|
-| Sentence generation, gloss fill, grammar explanations, dialogue scripts (offline) | `claude-opus-5` | Batches API (50% off), structured output, adaptive thinking (default) |
+| Sentence generation, gloss fill, grammar explanations, dialogue scripts (offline) | `claude-opus-5` | Online, structured output, adaptive thinking (default). *Not* the Batches API: unavailable on Vertex, so no 50% discount |
 | Personal i+1 sentence (runtime fallback) | `claude-opus-5`, effort medium | online, structured |
 | Roleplay turn, output correction, speak feedback | `MODEL_FAST` (default `claude-opus-5`, effort low; `claude-sonnet-5` opt-in) | online, structured |
 | Distractors for choice steps | none, algorithmic | |
 
-**SDK rules (anthropic 1.x)**: `AsyncAnthropic()`; structured output via `client.messages.parse(..., output_format=PydanticModel)` or `output_config={"format": {...}}` with `additionalProperties: false`; no assistant prefill, no `temperature`, no `budget_tokens`; server-side fallbacks on by default (`betas=["server-side-fallback-2026-07-01"]`, `fallbacks="default"`); always check `stop_reason == "refusal"` and fall back to a canned Russian message; batch results keyed by `custom_id`, never by position; `max_tokens` 4096 for runtime JSON turns, 16000 for batch generation.
+**SDK rules (anthropic 1.x)**: `AsyncAnthropicVertex(project_id=..., region=...)`, authenticated by the deployment's Google service account — `AsyncAnthropic()` only if the first-party API is ever used; structured output via `client.beta.messages.parse(..., output_format=PydanticModel)`, which fills `output_config.format` with a strict schema (`additionalProperties: false`) — note that `output_format` is the `parse()` helper's own argument and is current; what is deprecated is passing `output_format` to `messages.create()`, which now takes `output_config={"format": {...}}`; no assistant prefill, no `temperature`, no `budget_tokens`; always check `stop_reason == "refusal"` and fall back to a canned Russian message; `max_tokens` 4096 for runtime JSON turns, 16000 for batch generation.
+
+**Two Vertex-only consequences, both easy to miss because nothing fails until it matters:**
+
+- **Refusal fallbacks move client-side.** The server-side `fallbacks` parameter is first-party only. On Vertex, register the SDK's `BetaRefusalFallbackMiddleware` on the client instead; it takes an explicit model list, because there is no `"default"` routing policy to defer to. Without it a refusal is simply a dead end. `BetaFallbackState` pins follow-up turns in a conversation to whichever model accepted — one state object per conversation.
+- **No Message Batches API.** Offline seed generation runs as ordinary online calls at full price; the 50% batch discount is not available. Budget for it, and keep `custom_id`-keyed result handling for the day it is.
 
 **Prompt caching**: system prompt ordered stable → volatile: [pedagogy rules + schema description + style guide, `cache_control` 1h] → [user's known lemmas + grammar keys, sorted deterministically, `cache_control` 1h] → messages. Known list changes only at session end, so every turn within a session hits the cache. Verify via `usage.cache_read_input_tokens` in the ledger.
 

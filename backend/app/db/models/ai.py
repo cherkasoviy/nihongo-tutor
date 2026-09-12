@@ -16,7 +16,7 @@ class AiUsageLedger(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     task: Mapped[str] = mapped_column(String(64), nullable=False)
-    provider: Mapped[str] = mapped_column(String(32), nullable=False)  # anthropic | openai | google
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)  # google (Vertex, TTS, STT) | anthropic
     model: Mapped[str] = mapped_column(String(64), nullable=False)
     input_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     cache_read_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
