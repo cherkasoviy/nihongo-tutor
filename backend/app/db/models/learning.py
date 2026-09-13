@@ -191,7 +191,11 @@ class SessionStep(UUIDPrimaryKeyMixin, Base):
     )
     idx: Mapped[int] = mapped_column(Integer, nullable=False)
     kind: Mapped[StepKind] = mapped_column(Enum(StepKind, name="step_kind"), nullable=False)
-    card_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cards.id", ondelete="CASCADE"))
+    # SET NULL, not CASCADE. A step is a record of what the learner was shown, and deleting a card
+    # must never silently rewrite that record — which is exactly what happened in production: an
+    # un-claimed syllable deleted its cards, cascaded into the pending steps of a live lesson, and
+    # the sitting closed itself as "completed" with three quarters of its work gone.
+    card_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cards.id", ondelete="SET NULL"))
     item_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("items.id", ondelete="CASCADE"))
     payload: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
     status: Mapped[StepStatus] = mapped_column(

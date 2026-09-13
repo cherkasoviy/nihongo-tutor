@@ -254,7 +254,7 @@ async def test_taking_back_an_untested_claim_puts_the_syllable_back_in_the_queue
         await s.commit()
         assert await card_service.remaining_new_count(s, user_id=user.id, stages=KANA_STAGES) == before - 10
 
-        result = await placement_service.unmark_known(s, user_id=user.id, item_ids=ids)
+        result = await placement_service.unmark_known(s, user_id=user.id, item_ids=ids, now=NOW)
         await s.commit()
         after = await card_service.remaining_new_count(s, user_id=user.id, stages=KANA_STAGES)
 
@@ -288,7 +288,7 @@ async def test_claiming_nothing_is_harmless(sessionmaker: async_sessionmaker[Asy
     user = await _learner(sessionmaker)
     async with sessionmaker() as s:
         assert (await placement_service.mark_known(s, user_id=user.id, item_ids=[], now=NOW)).seeded == 0
-        assert (await placement_service.unmark_known(s, user_id=user.id, item_ids=[])).cleared == 0
+        assert (await placement_service.unmark_known(s, user_id=user.id, item_ids=[], now=NOW)).cleared == 0
 
 
 async def test_katakana_can_be_claimed_independently(
