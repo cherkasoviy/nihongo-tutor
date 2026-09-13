@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { AnswerResult, SessionStep } from '@/api/client';
-import { useAnswerStep, useRevealStep, useStartSession } from '@/api/hooks';
+import { useAnswerStep, useRevealStep, useStartPractice, useStartSession } from '@/api/hooks';
 
 import styles from './SessionRunner.module.css';
 
@@ -14,6 +14,7 @@ import styles from './SessionRunner.module.css';
  */
 export function SessionRunner() {
   const start = useStartSession();
+  const practice = useStartPractice();
   const answer = useAnswerStep();
   const reveal = useRevealStep();
   const [revealed, setRevealed] = useState<string | null>(null);
@@ -36,6 +37,15 @@ export function SessionRunner() {
   if (start.isPending) return <p className="hint">Готовим занятие…</p>;
   if (start.isError) return <p className="hint">Не удалось загрузить занятие. Попробуй ещё раз.</p>;
 
+  const beginPractice = () =>
+    practice.mutate(undefined, {
+      onSuccess: (s) => {
+        setStep(s.current);
+        setProgress({ done: s.completed_steps, total: s.planned_steps });
+        setFinished(s.current === null);
+      },
+    });
+
   if (finished) {
     return (
       <section className={styles.card}>
@@ -45,6 +55,12 @@ export function SessionRunner() {
             ? `Пройдено шагов: ${progress.done} из ${progress.total}.`
             : 'На сегодня всё — новых знаков пока нет и повторять нечего.'}
         </p>
+        {/* Extra practice is now a deliberate tap. It used to happen by itself whenever this
+            screen mounted, which quietly replayed the syllables just learned. */}
+        <button className={styles.practice} onClick={beginPractice} disabled={practice.isPending}>
+          {practice.isPending ? 'Готовим…' : 'Ещё повторение'}
+        </button>
+        {practice.isError && <p className="hint">Не получилось. Попробуй ещё раз.</p>}
       </section>
     );
   }

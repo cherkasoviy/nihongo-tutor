@@ -103,11 +103,23 @@ export function useStats() {
   });
 }
 
-/** Starts (or resumes) today's session. Idempotent server-side, so re-mounting is harmless. */
+/**
+ * Starts or resumes today's sitting. Never creates extra work: once the day's lesson is finished
+ * the server hands it back with no current step. Safe to call on mount.
+ */
 export function useStartSession() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => postJson<SessionState>('/api/session/today', {}, await ensureToken()),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['stats'] }),
+  });
+}
+
+/** Extra reviews, only when the learner asks. This one does create a sitting. */
+export function useStartPractice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => postJson<SessionState>('/api/session/practice', {}, await ensureToken()),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['stats'] }),
   });
 }
