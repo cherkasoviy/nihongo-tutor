@@ -70,8 +70,9 @@ export function App() {
       {/* Kept mounted, not conditionally rendered. SessionRunner starts the sitting on mount, so
           unmounting it on every tab change made returning to this tab ask the server for a new
           session — which it used to answer by creating one. Hidden, it holds its step and its
-          progress while the learner looks at her stats. */}
-      <div hidden={tab !== 'today'} style={tab === 'today' ? undefined : { display: 'none' }}>
+          progress while the learner looks at her stats. Nothing in global.css touches [hidden], so
+          the attribute's own UA rule is enough. */}
+      <div hidden={tab !== 'today'}>
         <SessionRunner />
       </div>
       {tab === 'kana' && <KanaGrid />}

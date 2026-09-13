@@ -17,6 +17,7 @@ import random
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Final
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,6 +50,18 @@ log = get_logger(__name__)
 
 CHOICE_OPTIONS = 4
 KANA_STAGES = (ItemStage.kana_hira, ItemStage.kana_kata)
+
+# The most one step may contribute to ``active_ms``. The number is wall-clock between showing a
+# step and answering it, which is only "active time" while the learner is actually looking at it —
+# a locked phone, a tab switch or a metro stop otherwise accrues the whole gap. Two minutes is
+# deliberately generous for a kana drill: the plan budgets about eight seconds a step, so a learner
+# who reads the mnemonic, thinks, and comes back to it is still well inside the cap, while a
+# forgotten screen contributes two minutes instead of two hours.
+#
+# This is not cosmetic. ``streak.session_counts`` accepts twelve active minutes as an alternative
+# to answering 60% of the plan, so without a cap one tap, a long gap, and a second tap earn the day
+# on two answers — and ``stats_service.minutes_7d`` reports study time that never happened.
+MAX_STEP_ACTIVE_MS: Final = 120_000
 
 # The plan's "/review — short repetition, 5 minutes". A practice sitting is capped rather than
 # open-ended: the point is to let a keen learner do a bit more, not to enable an all-nighter that
@@ -344,12 +357,15 @@ async def _resumable_session(
 
 async def todays_daily(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> LearningSession | None:
     """The day's planned lesson, however it ended. At most one exists per date."""
+    # ``one_or_none`` rather than ``first``: uniqueness is enforced by the partial index added in
+    # 0004_one_daily_per_day, and if that ever stops being true this should fail loudly rather than
+    # quietly pick whichever row the planner happened to return first.
     stmt = select(LearningSession).where(
         LearningSession.user_id == user_id,
         LearningSession.local_date == local_date,
         LearningSession.kind == SessionKind.daily,
     )
-    return (await session.scalars(stmt)).first()
+    return (await session.scalars(stmt)).one_or_none()
 
 
 async def _has_daily(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> bool:
@@ -586,10 +602,12 @@ async def _stage_for(session: AsyncSession, *, user_id: uuid.UUID) -> ItemStage:
 
 
 async def _recent_sessions(session: AsyncSession, *, user_id: uuid.UUID, limit: int = 3) -> list[float]:
-    # Daily only. Practice sittings are short by construction — a handful of due cards, often under
-    # a minute — so letting them in made ``_finished_under_target`` read a learner who did a full
-    # lesson *and* some extra practice as someone who keeps running out of time, and shrink the
-    # next plan for it.
+    # Daily only. This feeds ``_finished_under_target``, which gates the *bump* in
+    # ``session_planner``: when 7-day retention is already above 0.92 and the last three sittings
+    # all came in under the time target, tomorrow gets one extra new item. The signal is meant to
+    # read "she finishes her lesson with time to spare". A practice run is short by construction —
+    # a handful of due cards, often under a minute — so counting one is not evidence of that, and
+    # letting them in made the extra syllable *more* likely on the strength of a 40-second drill.
     stmt = (
         select(LearningSession.active_ms)
         .where(
@@ -788,7 +806,8 @@ async def _bump_progress(session: AsyncSession, *, step: SessionStep, now: dt.da
         return
     learning.completed_steps += 1
     if step.shown_at is not None:
-        learning.active_ms += max(0, int((now - step.shown_at).total_seconds() * 1000))
+        gap_ms = max(0, int((now - step.shown_at).total_seconds() * 1000))
+        learning.active_ms += min(gap_ms, MAX_STEP_ACTIVE_MS)
     await session.flush()
 
 

@@ -27,6 +27,7 @@ from app.db.models.learning import (
     Streak,
 )
 from app.db.models.users import User, UserRole
+from app.domain import streak
 from app.domain.grading import SelfGrade
 from app.services import card_service, session_service, user_service
 from app.services.session_service import KANA_STAGES
@@ -445,3 +446,49 @@ async def test_practice_length_does_not_shrink_the_next_day_s_plan(
     async with sessionmaker() as s:
         recent = await session_service._recent_sessions(s, user_id=user.id)
     assert recent == [17 * 60.0], f"practice leaked into the pacing signal: {recent}"
+
+
+async def test_a_step_left_on_screen_contributes_the_cap_not_the_gap(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """active_ms is wall-clock between showing a step and answering it, which stops being "active"
+    the moment the phone locks or the learner switches tabs.
+
+    It is not a cosmetic number: streak.session_counts accepts twelve active minutes as an
+    alternative to answering 60% of the plan, so uncapped, one tap and a long gap and a second tap
+    earn the day on two answers. Production carries a sitting whose active_ms is 160 minutes and
+    exactly equals its wall-clock span.
+    """
+    user = await _learner(sessionmaker, now=NOW)
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        learning, _ = await session_service.start_or_resume(s, user=learner, now=NOW)
+        await s.commit()
+        learning_id = learning.id
+
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        step = await session_service.next_step(s, learning_session_id=learning_id)
+        assert step is not None
+        await session_service.mark_shown(s, step=step, now=NOW, message_id=None)
+        # Shown, then answered two hours later: a phone in a pocket, not two hours of study.
+        much_later = NOW + dt.timedelta(hours=2)
+        if step.payload.get("mode") == "ack":
+            await session_service.acknowledge(s, step=step, now=much_later)
+        else:
+            await session_service.submit_choice(
+                s, user=learner, step=step, choice=int(step.payload["correct"]), now=much_later
+            )
+        await s.commit()
+
+    async with sessionmaker() as s:
+        row = await s.get(LearningSession, learning_id)
+        assert row is not None
+    assert (
+        row.active_ms == session_service.MAX_STEP_ACTIVE_MS
+    ), f"a two-hour gap contributed {row.active_ms} ms of 'active' time"
+    assert (
+        row.active_ms < streak.MIN_ACTIVE_MINUTES * 60 * 1000
+    ), "one answer must not on its own satisfy the streak's active-minutes floor"
