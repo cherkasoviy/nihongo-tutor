@@ -199,3 +199,66 @@ async def test_a_card_deleted_anyway_leaves_the_step_but_skips_it(
     assert (
         row.planned_steps == row.completed_steps
     ), "everything still answerable was answered, so the ratio must read as a finished lesson"
+
+
+async def test_an_orphaned_wrapup_is_skipped_not_served(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The wrap-up carries a card, so it must not be on the card-less allow-list.
+
+    If it is, layer 3 switches off for precisely the step that matters most: the wrap-up is the one
+    grade of the day that reaches FSRS for a syllable, and `_apply_grade` guards with
+    `if step.card_id is not None`. An orphaned wrap-up would be shown, answered, marked answered,
+    counted in completed_steps and told «Верно ✓» — with the grade silently discarded.
+    """
+    assert (
+        StepKind.wrapup not in session_service.CARDLESS_STEP_KINDS
+    ), "wrapup is built through _drill_step, which always sets card_id"
+
+    user = await _learner(sessionmaker)
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        learning, _ = await session_service.start_or_resume(s, user=learner, now=NOW)
+        await s.commit()
+        learning_id = learning.id
+
+    async with sessionmaker() as s:
+        wrapups = list(
+            await s.scalars(
+                select(SessionStep).where(SessionStep.session_id == learning_id, SessionStep.kind == StepKind.wrapup)
+            )
+        )
+    assert wrapups, "the sitting must contain a wrap-up for this test to mean anything"
+    assert all(w.card_id is not None for w in wrapups), "a wrap-up is built with a card"
+
+    # Orphan every card, as a delete would under 0006's SET NULL.
+    async with sessionmaker() as s:
+        await s.execute(
+            SessionStep.__table__.update().where(SessionStep.session_id == learning_id).values(card_id=None)
+        )
+        await s.commit()
+
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        for _ in range(400):
+            step = await session_service.next_step(s, learning_session_id=learning_id)
+            if step is None:
+                break
+            assert step.kind is not StepKind.wrapup, "an orphaned wrap-up was served to the learner"
+            await session_service.mark_shown(s, step=step, now=NOW, message_id=None)
+            await session_service.acknowledge(s, step=step, now=NOW)
+        await s.commit()
+
+    async with sessionmaker() as s:
+        skipped_wrapups = list(
+            await s.scalars(
+                select(SessionStep).where(
+                    SessionStep.session_id == learning_id,
+                    SessionStep.kind == StepKind.wrapup,
+                    SessionStep.status == StepStatus.skipped,
+                )
+            )
+        )
+    assert len(skipped_wrapups) == len(wrapups), "every orphaned wrap-up must be skipped"

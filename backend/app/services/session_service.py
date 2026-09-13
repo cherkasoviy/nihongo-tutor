@@ -63,11 +63,18 @@ KANA_STAGES = (ItemStage.kana_hira, ItemStage.kana_kata)
 # on two answers — and ``stats_service.minutes_7d`` reports study time that never happened.
 MAX_STEP_ACTIVE_MS: Final = 120_000
 
-# Step kinds that legitimately carry no card. Everything else is built with ``card_id=card.id``,
-# so a card-backed step that has lost its card can no longer be answered and must not sit in the
-# queue forever. Listed as an allow-list of the card-less kinds rather than inferred, so adding a
-# kind is a deliberate choice either way.
-CARDLESS_STEP_KINDS: Final = frozenset({StepKind.intro_item, StepKind.roleplay, StepKind.wrapup})
+# Step kinds that legitimately carry no card. Everything else is built through ``_drill_step``,
+# which always sets ``card_id=card.id``, so a card-backed step that has lost its card can no longer
+# be answered and must not sit in the queue.
+#
+# Exactly one entry, and the bar for adding another is that the kind is actually built without a
+# card today. ``wrapup`` was in here and should never have been: it goes through ``_drill_step``
+# like every other drill, so an orphaned wrap-up would have been served rather than skipped — shown,
+# answered, counted in ``completed_steps``, «Верно ✓» on screen — while ``_apply_grade``'s
+# ``if step.card_id is not None`` quietly dropped the grade. That is the one grade of the day that
+# reaches FSRS for a syllable. ``roleplay`` is gone for the weaker reason that it does not exist
+# yet; guessing at unbuilt kinds is how ``wrapup`` got in.
+CARDLESS_STEP_KINDS: Final = frozenset({StepKind.intro_item})
 
 # The plan's "/review — short repetition, 5 minutes". A practice sitting is capped rather than
 # open-ended: the point is to let a keen learner do a bit more, not to enable an all-nighter that
@@ -651,6 +658,11 @@ async def next_step(session: AsyncSession, *, learning_session_id: uuid.UUID) ->
     ``completed_steps / planned_steps`` keeps describing work the learner could actually do — which
     is what the streak reads. Nothing assigned ``StepStatus.skipped`` before this; it is what the
     status was for.
+
+    **Consequence worth knowing:** ``learning_sessions.planned_steps`` is therefore the work still
+    on offer, not a record of what was planned — it only ever shrinks, and only for steps nobody
+    could have answered. ``/diag`` and ``stats_service`` both surface it; neither should be read as
+    history. The count of ``session_steps`` rows is the record of what was actually built.
     """
     stmt = (
         select(SessionStep)
