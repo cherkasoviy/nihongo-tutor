@@ -356,3 +356,92 @@ async def test_an_empty_practice_tap_still_earns_nothing(
     assert practice.planned_steps == 0
     assert practice.outcome is SessionOutcome.abandoned
     assert streak is None, "tapping /review with nothing due is not a day's work"
+
+
+async def test_reopening_the_app_after_the_lesson_does_not_mint_a_practice_sitting(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The Mini App POSTs /session/today whenever its first tab mounts.
+
+    Tab switching unmounts and remounts that tab, so a learner checking her progress and coming
+    back created a fresh `learning_sessions` row each time — and practice draws from due cards, so
+    kana introduced minutes earlier (still in FSRS learning steps) came round again in the same
+    order. Opening a screen is not a request for more work.
+    """
+    user = await _learner(sessionmaker, now=NOW)
+
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        daily, created = await session_service.start_or_resume(s, user=learner, now=NOW)
+        assert created and daily.kind is SessionKind.daily
+        await s.commit()
+        daily_id = daily.id
+    await _play(sessionmaker, user, daily, NOW)
+
+    later = NOW + dt.timedelta(minutes=5)
+    for _ in range(5):  # five taps on the first tab
+        async with sessionmaker() as s:
+            learner = await s.get(User, user.id)
+            assert learner is not None
+            got, created = await session_service.start_or_resume(s, user=learner, now=later)
+            assert not created, "reopening the app created a session"
+            assert got.id == daily_id, "reopening handed back something other than today's lesson"
+            await s.commit()
+
+    async with sessionmaker() as s:
+        rows = await session_service.sessions_today(s, user_id=user.id, local_date=dt.date(2026, 4, 1))
+    assert len(rows) == 1, f"expected only the daily, got {[r.kind.value for r in rows]}"
+
+
+async def test_asking_for_practice_still_works(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The fix must not take extra practice away — it only stops it happening by accident."""
+    user = await _learner(sessionmaker, now=NOW)
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        daily, _ = await session_service.start_or_resume(s, user=learner, now=NOW)
+        await s.commit()
+    await _play(sessionmaker, user, daily, NOW)
+
+    later = NOW + dt.timedelta(minutes=5)
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        practice, created = await session_service.start_or_resume(s, user=learner, now=later, want=SessionKind.practice)
+        assert created and practice.kind is SessionKind.practice
+        await s.commit()
+
+
+async def test_practice_length_does_not_shrink_the_next_day_s_plan(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """`_recent_sessions` feeds `_finished_under_target`, which shrinks the plan when sittings run
+    short. Practice sittings are short by construction — a handful of due cards — so counting them
+    read a diligent learner as someone who keeps running out of time."""
+    user = await _learner(sessionmaker, now=NOW)
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        daily, _ = await session_service.start_or_resume(s, user=learner, now=NOW)
+        await s.commit()
+    await _play(sessionmaker, user, daily, NOW)
+
+    async with sessionmaker() as s:
+        # A full-length daily, and a 20-second practice run on top of it.
+        today = dt.date(2026, 4, 1)
+        row = await session_service.todays_daily(s, user_id=user.id, local_date=today)
+        assert row is not None
+        row.active_ms = 17 * 60 * 1000
+        practice, _ = await session_service.start_or_resume(
+            s, user=await s.get(User, user.id), now=NOW, want=SessionKind.practice  # type: ignore[arg-type]
+        )
+        practice.outcome = SessionOutcome.completed
+        practice.active_ms = 20 * 1000
+        await s.commit()
+
+    async with sessionmaker() as s:
+        recent = await session_service._recent_sessions(s, user_id=user.id)
+    assert recent == [17 * 60.0], f"practice leaked into the pacing signal: {recent}"

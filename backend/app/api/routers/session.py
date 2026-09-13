@@ -60,8 +60,10 @@ def _session_out(learning: LearningSession, current: SessionStep | None) -> Sess
 async def start_today(user: CurrentUser, session: SessionDep) -> SessionOut:
     """Start or resume the current sitting. Idempotent: calling it twice returns the same session.
 
-    Once the day's lesson is finished this hands back an extra *practice* sitting rather than
-    nothing, so a learner who wants to keep going is never told to come back tomorrow.
+    Never creates a practice sitting. Once the day's lesson is finished this hands it back with no
+    current step — the honest answer to "what now" — because the Mini App calls this whenever the
+    first tab mounts, and a page load must not be read as a request for more work. Extra practice
+    is ``POST /api/session/practice``.
     """
     return await _begin(user, session, want=None)
 

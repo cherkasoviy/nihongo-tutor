@@ -342,6 +342,18 @@ async def _resumable_session(
     return (await session.scalars(stmt)).first()
 
 
+async def todays_daily(
+    session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date
+) -> LearningSession | None:
+    """The day's planned lesson, however it ended. At most one exists per date."""
+    stmt = select(LearningSession).where(
+        LearningSession.user_id == user_id,
+        LearningSession.local_date == local_date,
+        LearningSession.kind == SessionKind.daily,
+    )
+    return (await session.scalars(stmt)).first()
+
+
 async def _has_daily(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> bool:
     """Whether the day's planned lesson has been issued at all, however it ended.
 
@@ -400,11 +412,13 @@ async def start_or_resume(
     """The sitting to show the learner right now. Returns ``(session, created)``.
 
     A sitting with work left in it is always resumed first, including one the learner stopped.
-    Otherwise this starts the day's planned lesson if it has not been issued yet, and an extra
-    *practice* sitting if it has — so finishing today never means being told to come back tomorrow.
-    ``want`` forces the choice (``/review`` asks for practice explicitly); asking for a ``daily``
-    once the day's lesson has been issued still yields practice, because its new items are out and
-    issuing more would wreck the spacing.
+    Otherwise this starts the day's planned lesson if it has not been issued yet. If it has, the
+    finished lesson is handed back as-is: the caller sees a session with no current step, which is
+    the truthful answer to "what should I be doing now".
+
+    ``want=practice`` is the only thing that creates an extra sitting — ``/review`` and the Mini
+    App's explicit "practice more" both pass it. Asking for a ``daily`` once the day's lesson has
+    been issued never issues a second one; a date carries at most one, and its new items are out.
     """
     today = clock.local_date(now, user.timezone)
 
@@ -417,8 +431,18 @@ async def start_or_resume(
             await session.flush()
         return resumable, False
 
-    issued = await _has_daily(session, user_id=user.id, local_date=today)
-    kind = SessionKind.practice if (issued or want is SessionKind.practice) else SessionKind.daily
+    if want is not SessionKind.practice:
+        # Opening the app is not a request for more work. Minting a practice sitting here meant
+        # every remount of the Mini App's first tab created a `learning_sessions` row, and because
+        # practice draws from due cards — kana introduced minutes ago are in FSRS learning steps —
+        # it served the same syllables over again. Extra practice is now something the learner asks
+        # for (``want=practice``, which ``/review`` and ``/api/session/practice`` pass), not
+        # something a page load does on their behalf.
+        finished_daily = await todays_daily(session, user_id=user.id, local_date=today)
+        if finished_daily is not None:
+            return finished_daily, False
+
+    kind = SessionKind.practice if want is SessionKind.practice else SessionKind.daily
 
     # Each sitting gets its own seed so a practice run is not a replay of the morning's lesson;
     # the order is persisted at creation, so reopening one still replays it exactly.
@@ -564,9 +588,17 @@ async def _stage_for(session: AsyncSession, *, user_id: uuid.UUID) -> ItemStage:
 
 
 async def _recent_sessions(session: AsyncSession, *, user_id: uuid.UUID, limit: int = 3) -> list[float]:
+    # Daily only. Practice sittings are short by construction — a handful of due cards, often under
+    # a minute — so letting them in made ``_finished_under_target`` read a learner who did a full
+    # lesson *and* some extra practice as someone who keeps running out of time, and shrink the
+    # next plan for it.
     stmt = (
         select(LearningSession.active_ms)
-        .where(LearningSession.user_id == user_id, LearningSession.outcome == SessionOutcome.completed)
+        .where(
+            LearningSession.user_id == user_id,
+            LearningSession.outcome == SessionOutcome.completed,
+            LearningSession.kind == SessionKind.daily,
+        )
         .order_by(LearningSession.local_date.desc())
         .limit(limit)
     )
