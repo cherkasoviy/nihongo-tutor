@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.content import Item, ItemStage
 from app.db.models.learning import Card, CardDirection, CardState, ReviewLog
-from app.domain import srs
+from app.domain import clock, srs
 from app.domain.srs import ReviewResult, SrsState
 
 # Kana is drilled both ways: recognise the glyph, and produce it from the Russian reading. The
@@ -263,3 +263,35 @@ async def retention_7d(
     if total < min_reviews:
         return None
     return float(row.recalled) / total
+
+
+async def upcoming(
+    session: AsyncSession, *, user_id: uuid.UUID, now: dt.datetime, timezone: str
+) -> tuple[int, dt.datetime | None]:
+    """How many cards come due during the learner's *next* local day, and when the next one is.
+
+    For the finished screen. "На сегодня всё" on its own reads as a dead end — especially to
+    someone who has just claimed forty syllables and cannot see that they are queued. Counting in
+    the learner's own day, not the next 24 hours, so "tomorrow" means what she means by it.
+    """
+    start, end = clock.day_bounds(clock.local_date(now, timezone) + dt.timedelta(days=1), timezone)
+    tomorrow = await session.scalar(
+        select(func.count())
+        .select_from(Card)
+        .where(
+            Card.user_id == user_id,
+            Card.suspended.is_(False),
+            Card.state != CardState.new,
+            Card.due >= start,
+            Card.due < end,
+        )
+    )
+    next_due = await session.scalar(
+        select(func.min(Card.due)).where(
+            Card.user_id == user_id,
+            Card.suspended.is_(False),
+            Card.state != CardState.new,
+            Card.due > now,
+        )
+    )
+    return int(tomorrow or 0), next_due

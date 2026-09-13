@@ -12,6 +12,23 @@ import styles from './SessionRunner.module.css';
  * so this component only renders and forwards taps. That is what lets a learner answer half the
  * session in the chat and the rest here without the two disagreeing.
  */
+/** Why there is nothing now, and when something comes back. */
+function whenNext({ tomorrow, nextAt }: { tomorrow: number; nextAt: string | null }): string {
+  if (tomorrow > 0) return `Завтра вернутся ${tomorrow} ${plural(tomorrow)} на повторение.`;
+  if (!nextAt) return 'Новые знаки появятся, когда подойдёт следующий день занятий.';
+  const when = new Date(nextAt);
+  const days = Math.max(1, Math.ceil((when.getTime() - Date.now()) / 86_400_000));
+  return `Следующее повторение — примерно через ${days} ${days === 1 ? 'день' : 'дн.'}, ${when.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}.`;
+}
+
+function plural(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'карточка';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'карточки';
+  return 'карточек';
+}
+
 export function SessionRunner() {
   const start = useStartSession();
   const practice = useStartPractice();
@@ -22,6 +39,10 @@ export function SessionRunner() {
   const [feedback, setFeedback] = useState<AnswerResult | null>(null);
   const [finished, setFinished] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [upcoming, setUpcoming] = useState<{ tomorrow: number; nextAt: string | null }>({
+    tomorrow: 0,
+    nextAt: null,
+  });
 
   const begin = start.mutate;
   useEffect(() => {
@@ -30,6 +51,7 @@ export function SessionRunner() {
         setStep(s.current);
         setProgress({ done: s.completed_steps, total: s.planned_steps });
         setFinished(s.current === null);
+        setUpcoming({ tomorrow: s.due_tomorrow, nextAt: s.next_due_at });
       },
     });
   }, [begin]);
@@ -43,6 +65,7 @@ export function SessionRunner() {
         setStep(s.current);
         setProgress({ done: s.completed_steps, total: s.planned_steps });
         setFinished(s.current === null);
+        setUpcoming({ tomorrow: s.due_tomorrow, nextAt: s.next_due_at });
       },
     });
 
@@ -53,8 +76,11 @@ export function SessionRunner() {
         <p className="hint">
           {progress.total > 0
             ? `Пройдено шагов: ${progress.done} из ${progress.total}.`
-            : 'На сегодня всё — новых знаков пока нет и повторять нечего.'}
+            : 'На сегодня всё: новых знаков сейчас нет, и повторять пока нечего.'}
         </p>
+        {/* An empty day is not a dead end, it is a gap in a schedule — but only if the screen says
+            so. Someone who has just claimed forty syllables cannot otherwise see them queued. */}
+        <p className="hint">{whenNext(upcoming)}</p>
         {/* Extra practice is now a deliberate tap. It used to happen by itself whenever this
             screen mounted, which quietly replayed the syllables just learned. */}
         <button className={styles.practice} onClick={beginPractice} disabled={practice.isPending}>

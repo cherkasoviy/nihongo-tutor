@@ -79,7 +79,8 @@ downgrade: ## alembic downgrade -1
 
 # --- codegen -----------------------------------------------------------------
 openapi: ## Export backend/openapi.json from the FastAPI app
-	$(UV) python -c "import json; from app.main import create_app; print(json.dumps(create_app().openapi(), ensure_ascii=False, indent=2))" > $(BACKEND)/openapi.json
+	@# The redirect runs after UV's `cd backend`, so the path here is relative to backend/.
+	$(UV) python -c "import json; from app.main import create_app; print(json.dumps(create_app().openapi(), ensure_ascii=False, indent=2))" > openapi.json
 
 gen-api: openapi ## Regenerate miniapp/src/api/schema.d.ts from the OpenAPI spec
 	cd $(MINIAPP) && npm run gen:api

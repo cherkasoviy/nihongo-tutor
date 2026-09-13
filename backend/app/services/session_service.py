@@ -342,9 +342,7 @@ async def _resumable_session(
     return (await session.scalars(stmt)).first()
 
 
-async def todays_daily(
-    session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date
-) -> LearningSession | None:
+async def todays_daily(session: AsyncSession, *, user_id: uuid.UUID, local_date: dt.date) -> LearningSession | None:
     """The day's planned lesson, however it ended. At most one exists per date."""
     stmt = select(LearningSession).where(
         LearningSession.user_id == user_id,

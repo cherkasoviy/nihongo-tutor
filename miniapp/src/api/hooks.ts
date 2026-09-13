@@ -9,6 +9,7 @@ import {
   type InviteOut,
   type KanaCell,
   type KanaScript,
+  type PlacementPreview,
   type PlacementResult,
   type RevealResult,
   type SessionState,
@@ -76,6 +77,18 @@ export function useKanaGrid(script?: KanaScript) {
     queryFn: async () =>
       getJson<KanaCell[]>(`/api/content/kana${script ? `?script=${script}` : ''}`, await ensureToken()),
     staleTime: 60_000,
+  });
+}
+
+/** What a claim would do, without doing it. The numbers come from the seeding code itself. */
+export function usePreviewKanaKnown() {
+  return useMutation({
+    mutationFn: async (itemIds: string[]) =>
+      postJson<PlacementPreview>(
+        '/api/content/kana/known/preview',
+        { item_ids: itemIds, known: true },
+        await ensureToken(),
+      ),
   });
 }
 

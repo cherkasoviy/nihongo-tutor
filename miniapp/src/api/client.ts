@@ -141,6 +141,18 @@ export interface SessionState {
   kind: 'daily' | 'practice';
   outcome: 'in_progress' | 'completed' | 'abandoned';
   current: SessionStep | null;
+  /** Only populated when there is no current step — the screen that has to explain itself. */
+  due_tomorrow: number;
+  next_due_at: string | null;
+}
+
+/** What claiming a set of syllables would do, before it is done. */
+export interface PlacementPreview {
+  syllables: number;
+  cards: number;
+  already_tested: number;
+  per_day: number;
+  days: number;
 }
 
 export interface AnswerResult {

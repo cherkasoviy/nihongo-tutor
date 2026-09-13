@@ -19,7 +19,7 @@ from app.db.base import SessionDep
 from app.db.models.learning import LearningSession, SessionClient, SessionKind, SessionStep
 from app.db.models.users import User
 from app.domain.grading import SelfGrade
-from app.services import session_service
+from app.services import card_service, session_service
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -44,7 +44,13 @@ def _step_out(step: SessionStep | None) -> SessionStepOut | None:
     )
 
 
-def _session_out(learning: LearningSession, current: SessionStep | None) -> SessionOut:
+def _session_out(
+    learning: LearningSession,
+    current: SessionStep | None,
+    *,
+    due_tomorrow: int = 0,
+    next_due_at: dt.datetime | None = None,
+) -> SessionOut:
     return SessionOut(
         id=learning.id,
         local_date=learning.local_date,
@@ -53,6 +59,8 @@ def _session_out(learning: LearningSession, current: SessionStep | None) -> Sess
         completed_steps=learning.completed_steps,
         outcome=learning.outcome.value,
         current=_step_out(current),
+        due_tomorrow=due_tomorrow,
+        next_due_at=next_due_at,
     )
 
 
@@ -82,8 +90,14 @@ async def _begin(user: User, session: AsyncSession, *, want: SessionKind | None)
     current = await session_service.next_step(session, learning_session_id=learning.id)
     if current is not None:
         await session_service.mark_shown(session, step=current, now=now, message_id=None)
+    # Only looked up when there is nothing to do: that is the screen that needs to explain itself.
+    due_tomorrow, next_due_at = (
+        (0, None)
+        if current is not None
+        else await card_service.upcoming(session, user_id=user.id, now=now, timezone=user.timezone)
+    )
     await session.commit()
-    return _session_out(learning, current)
+    return _session_out(learning, current, due_tomorrow=due_tomorrow, next_due_at=next_due_at)
 
 
 @router.post("/steps/{step_id}/reveal", response_model=RevealOut)
