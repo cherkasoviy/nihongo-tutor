@@ -118,6 +118,16 @@ class PlacementOut(BaseModel):
     cleared: int
 
 
+class PlacementPreviewOut(BaseModel):
+    """What a claim would do, so the learner can agree to it rather than discover it."""
+
+    syllables: int
+    cards: int
+    already_tested: int
+    per_day: int
+    days: int
+
+
 class SessionStepOut(BaseModel):
     id: uuid.UUID
     idx: int
@@ -141,6 +151,9 @@ class SessionOut(BaseModel):
     completed_steps: int
     outcome: str
     current: SessionStepOut | None = None
+    # So a finished screen can say when something comes back instead of reading as a dead end.
+    due_tomorrow: int = 0
+    next_due_at: dt.datetime | None = None
 
 
 class AnswerIn(BaseModel):

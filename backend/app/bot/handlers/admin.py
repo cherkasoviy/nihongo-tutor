@@ -1,4 +1,4 @@
-"""``/admin`` subcommands. Phase 0: invite management."""
+"""``/admin`` subcommands (invites) and ``/diag`` (read-only production snapshot)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.bot import texts_ru
 from app.config import Settings
 from app.db.models import Invite
-from app.services import invite_service, user_service
+from app.services import diag_service, invite_service, user_service
 
 router = Router(name="admin")
 
@@ -84,3 +84,28 @@ async def cmd_admin(
             return
 
         await message.answer(texts_ru.ADMIN_HELP)
+
+
+@router.message(Command("diag"))
+async def cmd_diag(
+    message: Message,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """What production currently looks like, for an owner holding a phone.
+
+    Admin-gated and read-only. It answers the questions that otherwise need psql — is her plan the
+    size I think it is, did tapping around create sittings, how many syllables are claimed but
+    unchecked — and deliberately answers nothing about what anyone actually typed.
+    """
+    if message.from_user is None:
+        return
+    async with sessionmaker() as session:
+        user = await user_service.get_by_tg_id(session, message.from_user.id)
+        if user is None:
+            await message.answer(texts_ru.NOT_REGISTERED)
+            return
+        if not user.is_admin:
+            await message.answer(texts_ru.ADMIN_ONLY)
+            return
+        diag = await diag_service.collect(session, now=dt.datetime.now(dt.UTC))
+    await message.answer(diag_service.render(diag))

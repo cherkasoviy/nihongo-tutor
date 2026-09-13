@@ -92,6 +92,12 @@ async def _play(
 async def test_finishing_today_offers_practice_rather_than_a_locked_door(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Asking for more still works — it just has to be asked for.
+
+    This used to happen on its own: any call without ``want`` produced practice once the daily was
+    out. That made the Mini App create a sitting every time its first tab mounted. The door is
+    still unlocked; it no longer opens when someone walks past it.
+    """
     user = await _learner(sessionmaker)
 
     async with sessionmaker() as s:
@@ -102,15 +108,26 @@ async def test_finishing_today_offers_practice_rather_than_a_locked_door(
     assert created and daily.kind is SessionKind.daily
 
     await _play(sessionmaker, user, daily, NOW)
+    later = NOW + dt.timedelta(hours=4)
 
-    # Later the same day the learner comes back for more.
+    # Merely coming back to the app hands back the finished lesson.
     async with sessionmaker() as s:
         learner = await s.get(User, user.id)
         assert learner is not None
-        extra, created_extra = await session_service.start_or_resume(s, user=learner, now=NOW + dt.timedelta(hours=4))
+        same, created_same = await session_service.start_or_resume(s, user=learner, now=later)
+        await s.commit()
+    assert not created_same and same.id == daily.id
+
+    # Tapping "Ещё повторение" is what creates one.
+    async with sessionmaker() as s:
+        learner = await s.get(User, user.id)
+        assert learner is not None
+        extra, created_extra = await session_service.start_or_resume(
+            s, user=learner, now=later, want=SessionKind.practice
+        )
         await s.commit()
 
-    assert created_extra, "a second sitting must actually be created"
+    assert created_extra, "asking for practice must actually create a sitting"
     assert extra.id != daily.id
     assert extra.kind is SessionKind.practice
     assert extra.local_date == daily.local_date
@@ -134,7 +151,9 @@ async def test_practice_never_introduces_new_items(
         )
         learner = await s.get(User, user.id)
         assert learner is not None
-        extra, _ = await session_service.start_or_resume(s, user=learner, now=NOW + dt.timedelta(hours=4))
+        extra, _ = await session_service.start_or_resume(
+            s, user=learner, now=NOW + dt.timedelta(hours=4), want=SessionKind.practice
+        )
         await s.commit()
 
         intros = int(
@@ -170,7 +189,9 @@ async def test_practice_cannot_earn_the_day_twice(
         assert streak is not None and streak.current == 1
         learner = await s.get(User, user.id)
         assert learner is not None
-        extra, _ = await session_service.start_or_resume(s, user=learner, now=NOW + dt.timedelta(hours=4))
+        extra, _ = await session_service.start_or_resume(
+            s, user=learner, now=NOW + dt.timedelta(hours=4), want=SessionKind.practice
+        )
         await s.commit()
 
     await _play(sessionmaker, user, extra, NOW + dt.timedelta(hours=4))
@@ -263,7 +284,7 @@ async def test_a_practice_drill_the_scheduler_did_not_ask_for_moves_nothing(
     async with sessionmaker() as s:
         learner = await s.get(User, user.id)
         assert learner is not None
-        extra, _ = await session_service.start_or_resume(s, user=learner, now=later)
+        extra, _ = await session_service.start_or_resume(s, user=learner, now=later, want=SessionKind.practice)
         await s.commit()
 
         steps = list(await s.scalars(select(SessionStep).where(SessionStep.session_id == extra.id)))

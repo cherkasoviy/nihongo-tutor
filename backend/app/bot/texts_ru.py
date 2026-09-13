@@ -69,7 +69,10 @@ ADMIN_INVITES_HEADER = "Последние приглашения:"
 ADMIN_INVITE_ROW = "<code>{code}</code> — {uses}/{max_uses}{revoked}, до {expires}"
 ADMIN_INVITE_REVOKED_MARK = " (отозвано)"
 ADMIN_NO_EXPIRY = "бессрочно"
-ADMIN_HELP = "Подкоманды: <code>/admin invite [макс_использований] [дней]</code>, <code>/admin invites</code>"
+ADMIN_HELP = (
+    "Подкоманды: <code>/admin invite [макс_использований] [дней]</code>, "
+    "<code>/admin invites</code>. Ещё есть <code>/diag</code> — состояние продакшена."
+)
 
 
 def display_name(first_name: str | None, username: str | None) -> str:

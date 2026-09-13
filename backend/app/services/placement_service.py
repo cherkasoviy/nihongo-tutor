@@ -186,3 +186,64 @@ async def claimed_but_unverified(session: AsyncSession, *, user_id: uuid.UUID) -
         ~select(ReviewLog.id).where(ReviewLog.card_id == Card.id).exists(),
     )
     return int((await session.execute(stmt)).scalar_one())
+
+
+@dataclass(frozen=True, slots=True)
+class PlacementPreview:
+    """What a claim is about to do, in the learner's terms."""
+
+    syllables: int
+    cards: int
+    already_tested: int
+    per_day: int
+    days: int
+
+
+async def preview(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    item_ids: Sequence[uuid.UUID],
+    per_day: int = SEEDED_REVIEWS_PER_DAY,
+) -> PlacementPreview:
+    """The shape of a claim before it is applied.
+
+    Computed here rather than in the Mini App so the number the learner agrees to is produced by
+    the same code that does the seeding — including the part where a syllable she has already been
+    tested on is left alone. A claim is a big, quiet decision; she should be able to see it first.
+    """
+    items = await _kana_items_in_order(session, item_ids)
+    if not items:
+        return PlacementPreview(syllables=0, cards=0, already_tested=0, per_day=per_day, days=0)
+
+    existing = {
+        (card.item_id, card.direction): card
+        for card in await session.scalars(
+            select(Card).where(Card.user_id == user_id, Card.item_id.in_([i.id for i in items]))
+        )
+    }
+    reviewed = set(
+        await session.scalars(
+            select(ReviewLog.card_id).where(ReviewLog.card_id.in_([c.id for c in existing.values()] or [None]))
+        )
+    )
+
+    seeded = skipped = 0
+    touched: set[uuid.UUID] = set()
+    for item in items:
+        for direction in KANA_DIRECTIONS:
+            card = existing.get((item.id, direction))
+            if card is not None and card.id in reviewed:
+                skipped += 1
+                continue
+            seeded += 1
+            touched.add(item.id)
+
+    days = -(-seeded // max(1, per_day)) if seeded else 0
+    return PlacementPreview(
+        syllables=len(touched),
+        cards=seeded,
+        already_tested=skipped,
+        per_day=per_day,
+        days=days,
+    )

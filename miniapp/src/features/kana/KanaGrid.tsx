@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { KanaCell, KanaScript } from '@/api/client';
-import { useKanaGrid, useSetKanaKnown } from '@/api/hooks';
+import { useKanaGrid, usePreviewKanaKnown, useSetKanaKnown } from '@/api/hooks';
 import { StrokeOrder } from '@/features/kana/StrokeOrder';
 
 import styles from './KanaGrid.module.css';
@@ -27,8 +27,12 @@ export function KanaGrid() {
   const [script, setScript] = useState<KanaScript>('hiragana');
   const [selected, setSelected] = useState<KanaCell | null>(null);
   const [placing, setPlacing] = useState(false);
+  // A bulk claim reshapes the next fortnight of reviews, so it gets a confirmation step showing
+  // what it will actually do. Single cells stay a direct toggle: one syllable is not a decision.
+  const [pending, setPending] = useState<{ itemIds: string[]; label: string } | null>(null);
   const { data, isLoading, isError } = useKanaGrid(script);
   const setKnown = useSetKanaKnown();
+  const preview = usePreviewKanaKnown();
 
   const groups = useMemo(() => {
     const byKind = new Map<string, KanaCell[]>();
@@ -78,7 +82,43 @@ export function KanaGrid() {
         <p className="hint">
           Отметь знаки, которые уже читаешь — я не буду их объяснять заново, но всё равно спрошу их
           в ближайшие пару недель, чтобы проверить. Нажми на группу целиком или на отдельный знак.
+          Чтобы снять отметку и попросить проверку, нажми на знак ещё раз.
         </p>
+      )}
+
+      {pending && (
+        <div className={styles.confirm}>
+          {preview.isPending && <p className="hint">Считаем…</p>}
+          {preview.data && (
+            <>
+              <p className={styles.confirmTitle}>{pending.label}: {preview.data.syllables} знаков</p>
+              <p className="hint">
+                Я не пропущу их — поставлю в очередь на проверку: {preview.data.cards} карточек,
+                примерно по {preview.data.per_day} в день,{' '}
+                {preview.data.days === 1 ? 'уже завтра' : `около ${preview.data.days} дней`}.
+                {preview.data.already_tested > 0 &&
+                  ` ${preview.data.already_tested} уже проверены — их не трогаю.`}
+              </p>
+            </>
+          )}
+          {preview.isError && <p className="hint">Не удалось посчитать. Попробуй ещё раз.</p>}
+          <div className={styles.confirmActions}>
+            <button
+              type="button"
+              className={styles.groupClaim}
+              disabled={setKnown.isPending || preview.isPending}
+              onClick={() => {
+                setKnown.mutate({ itemIds: pending.itemIds, known: true });
+                setPending(null);
+              }}
+            >
+              Отметить
+            </button>
+            <button type="button" className={styles.script} onClick={() => setPending(null)}>
+              Отмена
+            </button>
+          </div>
+        </div>
       )}
 
       {groups.map(([kind, cells]) => (
@@ -90,12 +130,11 @@ export function KanaGrid() {
                 type="button"
                 className={styles.groupClaim}
                 disabled={setKnown.isPending}
-                onClick={() =>
-                  setKnown.mutate({
-                    itemIds: cells.filter((c) => !c.introduced).map((c) => c.item_id),
-                    known: true,
-                  })
-                }
+                onClick={() => {
+                  const itemIds = cells.filter((c) => !c.introduced).map((c) => c.item_id);
+                  setPending({ itemIds, label: KIND_LABELS[kind] ?? kind });
+                  preview.mutate(itemIds);
+                }}
               >
                 Знаю все
               </button>

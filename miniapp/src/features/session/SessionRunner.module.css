@@ -24,3 +24,15 @@
 .done { margin: 0 0 8px; }
 
 .grades { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+
+.practice {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  font-size: 1rem;
+  color: var(--tg-theme-button-text-color, #fff);
+  background: var(--tg-theme-button-color, #2481cc);
+}
+.practice:disabled { opacity: 0.6; }

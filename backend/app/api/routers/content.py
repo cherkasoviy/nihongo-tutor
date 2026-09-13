@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser
-from app.api.schemas import KanaCellOut, PlacementIn, PlacementOut
+from app.api.schemas import KanaCellOut, PlacementIn, PlacementOut, PlacementPreviewOut
 from app.db.base import SessionDep
 from app.db.models.content import KanaScript
 from app.services import kana_service, placement_service
@@ -50,6 +50,24 @@ async def kana_grid(
         )
         for c in cells
     ]
+
+
+@router.post("/kana/known/preview", response_model=PlacementPreviewOut)
+async def preview_kana_known(body: PlacementIn, user: CurrentUser, session: SessionDep) -> PlacementPreviewOut:
+    """What claiming these would do, without doing it.
+
+    Claiming forty syllables at once is a big, quiet decision: it changes what the next fortnight
+    of reviews looks like. The learner should see the shape of that before agreeing, and the
+    numbers should come from the code that does the seeding rather than be re-derived in the UI.
+    """
+    result = await placement_service.preview(session, user_id=user.id, item_ids=body.item_ids)
+    return PlacementPreviewOut(
+        syllables=result.syllables,
+        cards=result.cards,
+        already_tested=result.already_tested,
+        per_day=result.per_day,
+        days=result.days,
+    )
 
 
 @router.post("/kana/known", response_model=PlacementOut)
