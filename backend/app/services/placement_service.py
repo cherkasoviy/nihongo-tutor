@@ -29,7 +29,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.content import Item, ItemType
@@ -141,12 +141,20 @@ async def unmark_known(
     *,
     user_id: uuid.UUID,
     item_ids: Sequence[uuid.UUID],
+    now: dt.datetime,
 ) -> PlacementResult:
     """Undo a claim, as long as it was never actually tested.
 
     A card the learner has answered is real history and stays: "I do not know this after all" is
-    what answering Again is for. Removing an untested card puts the syllable straight back in the
-    teaching queue, because a card in ``new`` with no review log is not counted as taught.
+    what answering Again is for.
+
+    Resets the untested cards rather than deleting them. The goal is only to put the syllable back
+    in the teaching queue, and ``card_service._taught_items`` already treats a card in ``new`` with
+    no review log as untaught — so a reset achieves exactly what a delete did. Deleting achieved
+    something else as well: ``session_steps.card_id`` used to cascade, so un-claiming a syllable in
+    the middle of a lesson silently destroyed that lesson's pending steps, and the sitting then
+    closed itself as "completed" with most of its work gone. The cascade is fixed too, but the
+    delete was never needed in the first place.
     """
     items = await _kana_items_in_order(session, item_ids)
     if not items:
@@ -163,7 +171,25 @@ async def unmark_known(
     )
     if not untested:
         return PlacementResult()
-    await session.execute(delete(Card).where(Card.id.in_(untested)))
+    await session.execute(
+        update(Card).where(Card.id.in_(untested))
+        # Exactly the shape ``card_service.introduce_item`` gives a brand-new card. ``due`` is
+        # NOT NULL and is meaningless while a card is ``new`` — the due queries skip that state —
+        # so ``now`` is simply the honest value to leave in it.
+        .values(
+            state=CardState.new,
+            step=0,
+            stability=None,
+            difficulty=None,
+            due=now,
+            last_review=None,
+            reps=0,
+            lapses=0,
+            elapsed_days=0,
+            scheduled_days=0,
+            suspended=False,
+        )
+    )
     await session.flush()
     cleared = len(untested)
     log.info("placement cleared", user_id=str(user_id), cleared=cleared)

@@ -16,9 +16,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.content import Item, ItemType, Kana, KanaKind, KanaScript
-from app.db.models.learning import Card, CardState
+from app.db.models.learning import Card, CardState, ReviewLog
 from app.domain import srs
 from app.services import card_service
+
+
+def _introduced(card: Card | None, reviewed: set[uuid.UUID]) -> bool:
+    """Genuinely started: the card has left ``new`` or has collected an answer."""
+    if card is None:
+        return False
+    return card.state is not CardState.new or card.id in reviewed
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +72,18 @@ async def kana_grid(
     if scripts:
         stmt = stmt.where(Kana.script.in_(scripts))
 
+    # Which cards carry a real answer. "Introduced" has to mean the syllable has genuinely been
+    # started, not merely that a row exists: ``introduce_item`` creates cards the moment the planner
+    # *decides* to teach something, and ``unmark_known`` resets a card rather than deleting it. This
+    # is the same predicate ``card_service._taught_items`` uses, so the grid and the curriculum agree
+    # on what the learner has met — and a freshly created card no longer reads as claimed, which is
+    # what made tapping a just-taught syllable in placement mode un-teach it.
+    reviewed_cards = set(
+        await session.scalars(
+            select(ReviewLog.card_id).join(Card, Card.id == ReviewLog.card_id).where(Card.user_id == user_id)
+        )
+    )
+
     scheduler = srs.make_scheduler(desired_retention=desired_retention, enable_fuzzing=False)
     out: list[KanaProgress] = []
     for kana, item, card in (await session.execute(stmt)).all():
@@ -83,7 +102,7 @@ async def kana_grid(
                 example_word=kana.example_word,
                 example_reading=kana.example_reading,
                 example_gloss_ru=kana.example_gloss_ru,
-                introduced=card is not None,
+                introduced=_introduced(card, reviewed_cards),
                 state=card.state if card is not None else None,
                 retrievability=(srs.retrievability(state, now, scheduler=scheduler) if state else None),
                 due=card.due if card is not None else None,

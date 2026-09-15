@@ -84,7 +84,7 @@ async def set_kana_known(body: PlacementIn, user: CurrentUser, session: SessionD
     if body.known:
         result = await placement_service.mark_known(session, user_id=user.id, item_ids=body.item_ids, now=now)
     else:
-        result = await placement_service.unmark_known(session, user_id=user.id, item_ids=body.item_ids)
+        result = await placement_service.unmark_known(session, user_id=user.id, item_ids=body.item_ids, now=now)
     await session.commit()
     return PlacementOut(
         seeded=result.seeded,

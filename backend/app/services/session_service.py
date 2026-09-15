@@ -63,6 +63,19 @@ KANA_STAGES = (ItemStage.kana_hira, ItemStage.kana_kata)
 # on two answers — and ``stats_service.minutes_7d`` reports study time that never happened.
 MAX_STEP_ACTIVE_MS: Final = 120_000
 
+# Step kinds that legitimately carry no card. Everything else is built through ``_drill_step``,
+# which always sets ``card_id=card.id``, so a card-backed step that has lost its card can no longer
+# be answered and must not sit in the queue.
+#
+# Exactly one entry, and the bar for adding another is that the kind is actually built without a
+# card today. ``wrapup`` was in here and should never have been: it goes through ``_drill_step``
+# like every other drill, so an orphaned wrap-up would have been served rather than skipped — shown,
+# answered, counted in ``completed_steps``, «Верно ✓» on screen — while ``_apply_grade``'s
+# ``if step.card_id is not None`` quietly dropped the grade. That is the one grade of the day that
+# reaches FSRS for a syllable. ``roleplay`` is gone for the weaker reason that it does not exist
+# yet; guessing at unbuilt kinds is how ``wrapup`` got in.
+CARDLESS_STEP_KINDS: Final = frozenset({StepKind.intro_item})
+
 # The plan's "/review — short repetition, 5 minutes". A practice sitting is capped rather than
 # open-ended: the point is to let a keen learner do a bit more, not to enable an all-nighter that
 # the scheduler will spend the next fortnight undoing.
@@ -637,6 +650,20 @@ async def _missed_days(session: AsyncSession, *, user_id: uuid.UUID, today: dt.d
 
 
 async def next_step(session: AsyncSession, *, learning_session_id: uuid.UUID) -> SessionStep | None:
+    """The next step to show, skipping any whose card has gone away.
+
+    A card-backed step with no ``card_id`` cannot be answered: un-claiming a syllable resets its
+    cards, and ``0006`` makes a card that is genuinely deleted null the column rather than take the
+    step with it. Such a step is marked ``skipped`` and ``planned_steps`` drops by one, so
+    ``completed_steps / planned_steps`` keeps describing work the learner could actually do — which
+    is what the streak reads. Nothing assigned ``StepStatus.skipped`` before this; it is what the
+    status was for.
+
+    **Consequence worth knowing:** ``learning_sessions.planned_steps`` is therefore the work still
+    on offer, not a record of what was planned — it only ever shrinks, and only for steps nobody
+    could have answered. ``/diag`` and ``stats_service`` both surface it; neither should be read as
+    history. The count of ``session_steps`` rows is the record of what was actually built.
+    """
     stmt = (
         select(SessionStep)
         .where(
@@ -644,9 +671,24 @@ async def next_step(session: AsyncSession, *, learning_session_id: uuid.UUID) ->
             SessionStep.status.in_((StepStatus.pending, StepStatus.shown)),
         )
         .order_by(SessionStep.idx)
-        .limit(1)
     )
-    return (await session.scalars(stmt)).first()
+    skipped = 0
+    chosen: SessionStep | None = None
+    for step in await session.scalars(stmt):
+        if step.card_id is None and step.kind not in CARDLESS_STEP_KINDS:
+            step.status = StepStatus.skipped
+            skipped += 1
+            continue
+        chosen = step
+        break
+
+    if skipped:
+        learning = await session.get(LearningSession, learning_session_id)
+        if learning is not None:
+            learning.planned_steps = max(learning.completed_steps, learning.planned_steps - skipped)
+        await session.flush()
+        log.info("orphaned steps skipped", session_id=str(learning_session_id), count=skipped)
+    return chosen
 
 
 async def mark_shown(session: AsyncSession, *, step: SessionStep, now: dt.datetime, message_id: int | None) -> None:
