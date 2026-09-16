@@ -10,7 +10,7 @@ from arq.connections import RedisSettings
 from app.bot.dispatcher import create_bot
 from app.config import get_settings
 from app.logging import configure_logging, get_logger
-from app.workers import maintenance, reminders
+from app.workers import maintenance, quota_watch, reminders
 
 log = get_logger(__name__)
 
@@ -34,7 +34,12 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 class WorkerSettings:
     functions = [maintenance.ping]
-    cron_jobs = [cron(reminders.reminder_tick, minute=set(range(60)), run_at_startup=False)]
+    cron_jobs = [
+        cron(reminders.reminder_tick, minute=set(range(60)), run_at_startup=False),
+        # Once a day, well before the nightly backup. Characters accrue slowly and the alert is
+        # about noticing a runaway, not about reacting within the hour.
+        cron(quota_watch.quota_tick, hour={3}, minute={5}, run_at_startup=False),
+    ]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)

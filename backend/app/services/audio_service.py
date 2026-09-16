@@ -24,6 +24,10 @@ log = structlog.get_logger(__name__)
 
 TASK: Final = "tts"
 PROVIDER_LEDGER_NAME: Final = "google"
+# What a <speak><prosody …> wrapper adds, used only for the pre-flight estimate. Google bills SSML
+# tags as characters, so the ceiling check has to allow for them even though the plain path sends
+# none — under-estimating here would wave through the one request that crosses the line.
+SSML_OVERHEAD_CHARS: Final = 45
 
 
 class QuotaExceeded(RuntimeError):
@@ -82,9 +86,13 @@ async def get_or_create(
         return StoredClip(hash=digest, mp3_path=str(mp3), ogg_path=str(ogg), synthesized=False)
 
     spent = await chars_this_month(session, now=now)
-    if spent + len(text) > monthly_char_ceiling:
+    # Checked before the call against a conservative estimate, then recorded from what the provider
+    # says it actually sent. Estimating low here would let a single oversized request through; the
+    # ledger is what has to be exact, and only the provider knows the real figure.
+    estimate = 2 * (len(text) + SSML_OVERHEAD_CHARS)
+    if spent + estimate > monthly_char_ceiling:
         raise QuotaExceeded(
-            f"{spent} characters already synthesised this month; {len(text)} more would pass "
+            f"{spent} characters already synthesised this month; about {estimate} more would pass "
             f"the {monthly_char_ceiling} ceiling"
         )
 
@@ -106,7 +114,7 @@ async def get_or_create(
             task=TASK,
             provider=PROVIDER_LEDGER_NAME,
             model=voice,
-            chars=len(text),
+            chars=clip.billed_chars,
             cost_usd=0,
             # Stamped with the caller's clock, not the database's. ``chars_this_month`` computes its
             # window from the same ``now``, and a ledger whose rows are timed by a different clock
@@ -115,5 +123,5 @@ async def get_or_create(
         )
     )
     await session.flush()
-    log.info("clip synthesised", hash=digest, chars=len(text), voice=voice, ssml=ssml.value)
+    log.info("clip synthesised", hash=digest, chars=clip.billed_chars, voice=voice, ssml=ssml.value)
     return StoredClip(hash=digest, mp3_path=str(mp3), ogg_path=str(ogg), synthesized=True)

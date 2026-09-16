@@ -41,13 +41,22 @@ def test_the_path_is_the_key() -> None:
     assert clip_path("/data/audio", digest, Encoding.ogg).name == f"{digest}.ogg"
 
 
+def test_the_normal_case_sends_no_markup_at_all() -> None:
+    """Google bills SSML tags as characters. A bare <speak></speak> is 15 of them, and with one
+    request per encoding that is 18,060 billed characters across full seed coverage against 4,244
+    of actual Japanese — 4.3x the content, for a wrapper the normal case does not need."""
+    assert wrap_ssml("みず", Ssml.plain) == "みず"
+    assert "<" not in wrap_ssml("これは何ですか", Ssml.plain)
+
+
 def test_slow_is_the_same_text_under_a_prosody_rate() -> None:
-    assert wrap_ssml("みず", Ssml.plain) == "<speak>みず</speak>"
     slow = wrap_ssml("みず", Ssml.slow)
     assert f'rate="{SLOW_RATE:.0%}"' in slow and "みず" in slow
+    assert slow.startswith("<speak>")
 
 
-def test_markup_in_the_text_cannot_escape_the_document() -> None:
-    """A gloss or example containing < or & must not become SSML."""
-    assert "<b>" not in wrap_ssml("a<b>c", Ssml.plain)
-    assert "&amp;" in wrap_ssml("a & b", Ssml.plain)
+def test_markup_in_the_text_cannot_escape_the_ssml_document() -> None:
+    """Only the SSML path escapes, because only it builds a document. The plain path sends the
+    text verbatim, where < and & are just characters."""
+    assert "<b>" not in wrap_ssml("a<b>c", Ssml.slow)
+    assert "&amp;" in wrap_ssml("a & b", Ssml.slow)

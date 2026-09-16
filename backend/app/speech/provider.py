@@ -17,10 +17,16 @@ from app.speech.keys import Encoding, Ssml
 
 @dataclass(frozen=True, slots=True)
 class Clip:
-    """One synthesis result: the same utterance in both encodings."""
+    """One synthesis result: the same utterance in both encodings.
+
+    ``billed_chars`` is what the provider actually sent, not what the caller asked for. Only the
+    provider knows: Google counts every character of the request including SSML tags, and bills each
+    encoding as its own request. Reporting it from here is what keeps the ledger honest.
+    """
 
     mp3: bytes
     ogg: bytes
+    billed_chars: int
     duration_ms: int | None = None
     timepoints: dict[str, Any] | None = None
 
@@ -58,6 +64,7 @@ class FakeTTS:
         return Clip(
             mp3=b"FAKEMP3" + digest,
             ogg=b"FAKEOGG" + digest,
+            billed_chars=2 * len(text),  # one request per encoding, as the real provider does
             duration_ms=100 * max(1, len(text)),
             timepoints=None,
         )

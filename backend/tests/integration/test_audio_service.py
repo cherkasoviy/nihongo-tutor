@@ -108,7 +108,9 @@ async def test_every_synthesis_is_metered(sessionmaker: async_sessionmaker[Async
         rows = list(await s.scalars(select(AiUsageLedger).where(AiUsageLedger.task == "tts")))
         spent = await audio_service.chars_this_month(s, now=NOW)
     assert len(rows) == 2, "a cache hit must not appear in the ledger"
-    assert spent == len("みず") + len("これは何ですか")
+    # Twice the text, because each encoding is its own billed request. The ledger records what the
+    # provider says it sent, not what the caller asked for.
+    assert spent == 2 * (len("みず") + len("これは何ですか"))
 
 
 async def test_the_ceiling_stops_synthesis_rather_than_billing_for_it(
@@ -117,9 +119,9 @@ async def test_the_ceiling_stops_synthesis_rather_than_billing_for_it(
     """Full coverage is ~4,200 characters against a 1M tier, so hitting this means a bug — and a
     bug that loops must fail loudly rather than run up a quiet bill."""
     tts = FakeTTS()
-    await _get(sessionmaker, tts, tmp_path, text="あいうえお", ceiling=6)
+    await _get(sessionmaker, tts, tmp_path, text="あいうえお", ceiling=105)
     with pytest.raises(audio_service.QuotaExceeded):
-        await _get(sessionmaker, tts, tmp_path, text="かきくけこ", ceiling=6)
+        await _get(sessionmaker, tts, tmp_path, text="かきくけこ", ceiling=105)
     assert len(tts.calls) == 1, "the provider was called despite the ceiling"
 
 
@@ -128,7 +130,7 @@ async def test_the_ceiling_counts_this_month_only(
 ) -> None:
     """The provider's tier resets monthly, so the window has to match it."""
     tts = FakeTTS()
-    await _get(sessionmaker, tts, tmp_path, text="あいうえお", ceiling=6)
+    await _get(sessionmaker, tts, tmp_path, text="あいうえお", ceiling=105)
     next_month = NOW.replace(month=5)
-    clip = await _get(sessionmaker, tts, tmp_path, text="かきくけこ", ceiling=6, now=next_month)
+    clip = await _get(sessionmaker, tts, tmp_path, text="かきくけこ", ceiling=105, now=next_month)
     assert clip.synthesized, "last month's characters must not block this month"
