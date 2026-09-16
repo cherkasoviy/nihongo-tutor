@@ -49,6 +49,24 @@ export class ApiError extends Error {
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
+/**
+ * Fetch an audio clip as an object URL.
+ *
+ * The endpoint is authenticated and an `<audio src>` cannot carry a bearer token, so the bytes are
+ * fetched with the header and wrapped in a blob rather than putting a credential in a URL where it
+ * would land in logs and history.
+ *
+ * MP3, not Ogg: iOS Safari and the WebView Telegram uses do not reliably play Ogg/Opus, and that
+ * failure is silent and invisible from an Android phone.
+ */
+export async function fetchAudioUrl(path: string, token?: string): Promise<string> {
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(BASE + path, { headers });
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  return URL.createObjectURL(await res.blob());
+}
+
 async function request<T>(method: string, path: string, body?: unknown, token?: string): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -113,6 +131,8 @@ export interface SessionStep {
   idx: number;
   kind: StepKind;
   status: 'pending' | 'shown' | 'answered' | 'skipped';
+  /** The syllable this step is about, when it is about one — what the audio endpoint keys on. */
+  item_id: string | null;
   mode: 'choice' | 'ack' | 'self';
   prompt: string | null;
   char: string | null;

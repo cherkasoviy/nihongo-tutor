@@ -1,0 +1,11 @@
+.play {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  background: var(--tg-theme-button-color, #2481cc);
+  color: var(--tg-theme-button-text-color, #fff);
+}
+.play:disabled { opacity: 0.6; }

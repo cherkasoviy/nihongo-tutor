@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { AnswerResult, SessionStep } from '@/api/client';
+import { PlayButton } from '@/features/audio/PlayButton';
 import { useAnswerStep, useRevealStep, useStartPractice, useStartSession } from '@/api/hooks';
 
 import styles from './SessionRunner.module.css';
@@ -157,6 +158,12 @@ function Intro({ step, onNext }: { step: SessionStep; onNext: () => void }) {
     <>
       <p className={styles.bigChar}>{step.char}</p>
       <p className={styles.reading}>{step.cyrillic}</p>
+      {/* The moment a syllable is first met is the moment to hear it, not a screen later. */}
+      {step.item_id && step.char && (
+        <div className={styles.listen}>
+          <PlayButton itemId={step.item_id} label={step.char} />
+        </div>
+      )}
       {step.mnemonic_ru && <p className={styles.mnemonic}>{step.mnemonic_ru}</p>}
       {step.example_word && (
         <p className={styles.example}>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import type { KanaCell, KanaScript } from '@/api/client';
 import { useKanaGrid, usePreviewKanaKnown, useSetKanaKnown } from '@/api/hooks';
+import { PlayButton } from '@/features/audio/PlayButton';
 import { StrokeOrder } from '@/features/kana/StrokeOrder';
 
 import styles from './KanaGrid.module.css';
@@ -187,6 +188,8 @@ function KanaDetail({ cell, onClose }: { cell: KanaCell; onClose: () => void }) 
         <div>
           <p className={styles.detailChar}>{cell.char}</p>
           <p className={styles.detailReading}>{cell.cyrillic}</p>
+          {/* The first Japanese sound this app has ever made. Reading, never the written form. */}
+          <PlayButton itemId={cell.item_id} label={cell.char} />
         </div>
       </div>
       {cell.mnemonic_ru && <p className={styles.mnemonic}>{cell.mnemonic_ru}</p>}

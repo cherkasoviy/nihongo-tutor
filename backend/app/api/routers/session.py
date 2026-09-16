@@ -33,6 +33,7 @@ def _step_out(step: SessionStep | None) -> SessionStepOut | None:
         idx=step.idx,
         kind=step.kind.value,
         status=step.status.value,
+        item_id=step.item_id,
         mode=str(payload.get("mode", "choice")),
         prompt=payload.get("prompt"),
         char=payload.get("char"),
