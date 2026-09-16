@@ -13,8 +13,12 @@ x-backend: &backend
   env_file: .env
   environment:
     AUDIO_DIR: /data/audio
+    GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-sa.json
   volumes:
     - audio:/data/audio
+    # Read-only, and from /etc rather than the repo: /opt/nihongo-tutor is a git checkout that
+    # deploy.sh pulls into, so a credential living there is one `git add -A` from being published.
+    - /etc/nihongo/google-sa.json:/run/secrets/google-sa.json:ro
   depends_on:
     postgres:
       condition: service_healthy
