@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     )
     redis_url: str = "redis://localhost:6379/0"
     audio_dir: str = "/data/audio"
+    # Verified against the project's own voices endpoint rather than assumed — docs/CONTENT.md says
+    # to list them and record the exact id, because a wrong voice name fails at call time.
+    tts_voice: str = "ja-JP-Neural2-B"
+    tts_rate: float = 1.0
+    # Full coverage of every seed is ~4,200 characters against a 1M/month tier. The ceiling is not
+    # there to ration anything; it is there so a bug that re-synthesises in a loop stops.
+    tts_monthly_char_ceiling: int = 200_000
 
     # --- telegram ------------------------------------------------------------
     bot_token: SecretStr = SecretStr("")
