@@ -171,6 +171,7 @@ BUTTON_FORGOT = "Не помню"
 BUTTON_KNEW = "Помню"
 BUTTON_EASY = "Легко"
 BUTTON_NEXT = "Дальше"
+BUTTON_PLAY_EXAMPLE = "🔊 пример"
 BUTTON_STOP = "Закончить"
 
 
@@ -236,3 +237,7 @@ TTS_QUOTA_NOTE = {
     "стоит около 4 000 символов, так что такой расход почти наверняка означает ошибку в коде, "
     "а не реальную нагрузку.",
 }
+
+# Audio is an addition to the card, never a precondition for it, so a failure is a toast rather
+# than an error — the lesson carries on exactly as it was.
+AUDIO_UNAVAILABLE = "Звук сейчас недоступен."
