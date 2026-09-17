@@ -244,6 +244,10 @@ def _example_caption(payload: dict[str, Any]) -> str | None:
 
     A bare voice bubble is anonymous: tapped twice and scrolled past, it is two identical grey
     blobs. The card prints the word next to the button; the caption is the chat's version of that.
+
+    This is the one place the **written** form is used on purpose. Everywhere else sends the reading,
+    because an engine guessing between にほん and にっぽん produces confidently wrong audio — but a
+    caption is read, not spoken, and 雨 is what the card shows and what she should learn to see.
     """
     word = payload.get("example_word")
     if not word:

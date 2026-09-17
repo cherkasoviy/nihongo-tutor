@@ -7,6 +7,8 @@ an instant reaction taps again — so the same answer arrives twice, and it must
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from aiogram import Dispatcher
 from aiogram.methods import EditMessageText, SendMessage
@@ -249,7 +251,7 @@ async def test_the_intro_card_offers_its_example_and_playing_it_changes_nothing_
     bot: MockedBot,
     sessionmaker: async_sessionmaker[AsyncSession],
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: object,
+    tmp_path: Path,
 ) -> None:
     """Chat parity with the Mini App, which has had a button for the example word since audio
     landed. The chat learner could hear the syllable but never the word it lives in."""
@@ -314,7 +316,7 @@ async def test_the_example_is_spoken_by_its_reading_not_its_written_form(
     bot: MockedBot,
     sessionmaker: async_sessionmaker[AsyncSession],
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: object,
+    tmp_path: Path,
 ) -> None:
     """The rule this handler exists to follow, made testable.
 
@@ -357,7 +359,7 @@ async def test_the_example_voice_says_what_it_is(
     bot: MockedBot,
     sessionmaker: async_sessionmaker[AsyncSession],
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: object,
+    tmp_path: Path,
 ) -> None:
     """A bare voice bubble is anonymous: tapped twice and scrolled past, it is two identical grey
     blobs with nothing saying which word they are."""
@@ -375,14 +377,17 @@ async def test_the_example_voice_says_what_it_is(
 
     await dp.feed_update(bot, callback_update(tg_id, StepExample(step_id=step.id).pack()))
 
-    captions = [c for c in bot.sent_captions() if c]
-    word = str(step.payload.get("example_word"))
-    assert any(word in c for c in captions), f"no caption named the word; captions were {captions}"
-
-    # And it quotes the card. Without a caption that link was the only thing tying a sound to its
-    # syllable; with one it is still what makes yesterday's history readable.
+    # Asserted on the example's own send. Searching every caption would pass on the *card's*
+    # caption, which already contains "Пример: {word} — {gloss}" via STEP_INTRO_KANA_EXAMPLE — so
+    # the union version passed whether _example_caption returned anything or None.
     sends = bot.voice_sends()
-    assert sends, "no voice was sent"
-    # aiogram 3.31 sends reply_parameters, not the older reply_to_message_id.
-    replied_to = getattr(getattr(sends[-1], "reply_parameters", None), "message_id", None)
+    assert len(sends) >= 2, "expected the card's voice, then the example's"
+    example = sends[-1]
+    word = str(step.payload.get("example_word"))
+    assert (
+        example.caption and word in example.caption
+    ), f"the example voice must name its word; caption was {example.caption!r}"
+
+    # And it quotes the card. aiogram 3.31 sends reply_parameters, not reply_to_message_id.
+    replied_to = getattr(getattr(example, "reply_parameters", None), "message_id", None)
     assert replied_to is not None, "the example should reply to the card, not float free in the chat"
