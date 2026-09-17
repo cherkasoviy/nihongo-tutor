@@ -198,6 +198,61 @@ is the only thing a backup protects**, and after step 4 the server holds the onl
 Copy the backups off the box — the commented `gcloud storage rsync` line in `backup.sh` is one way,
 any object store works.
 
+## How deploys happen
+
+**Merging to `main` deploys it.** CI runs the backend, miniapp and infra jobs; if all three pass,
+a `deploy` job opens an SSH session to the box and hands it the commit sha it just tested. Nothing
+to run by hand, and no window in which what is deployed differs from what was tested.
+
+```
+merge to main  →  CI (backend, miniapp, infra)  →  deploy job  →  deploy-from-ci.sh  →  deploy.sh
+```
+
+The deploy job appears on pull-request runs too and is skipped there. That is deliberate: the gate
+is visible in the checks list rather than only existing on `main`.
+
+### What the CI key can do
+
+Exactly one thing. The key is a forced command in the `deploy` user's `authorized_keys`, so a
+session opened with it runs `deploy-from-ci.sh` and nothing else — no shell, no port forwarding, no
+agent forwarding. The commit sha arrives in `SSH_ORIGINAL_COMMAND` and is the only input a holder of
+that key could vary, so it is validated twice:
+
+- it must match `^[0-9a-f]{40}$` — anchored, exactly forty characters, lower case;
+- and `git merge-base --is-ancestor` must place it **on `origin/main`**. This is the check that
+  makes "deploy the commit CI tested" true rather than aspirational, and `--ff-only` is not a
+  substitute for it: that only proves the sha descends from whatever the checkout is on, and this
+  object store is not clean — every past manual deploy ran a bare `git pull`, which drags every
+  `claude/**` branch tip into it. Without the ancestor check an unmerged feature branch descending
+  from main would have satisfied `--ff-only` and been deployed unreviewed. The `--ff-only` merge
+  stays as a second line, against a local `main` that had somehow diverged.
+
+The runner never checks out the repository. It needs the key and the sha; the server fetches its own
+code.
+
+### Rolling back
+
+Revert the commit and merge the revert. That is a normal deploy of a normal commit, and it goes
+through the same tests — which is the point of not having a separate rollback path to get wrong.
+
+For something faster, the manual path below still works. Checking out a bare sha leaves the
+checkout detached, which is fine and temporary: the next CI deploy runs `git checkout -q main`
+before anything else, so it rejoins by itself on the following merge.
+
+### Deploying by hand, for emergencies
+
+Still supported, and unchanged apart from **who** runs it. `/opt/nihongo-tutor` is owned by the
+`deploy` user now, and git refuses to operate on a repository owned by someone else, so running it
+as root fails with *"detected dubious ownership"*:
+
+```bash
+ssh root@<host>
+su - deploy -c '/opt/nihongo-tutor/infra/scripts/deploy.sh'
+```
+
+Do not "fix" that by adding `safe.directory` for root — the ownership is what keeps the deploy
+user's reach to exactly the checkout it deploys.
+
 ## When something is wrong
 
 | Symptom | Look at |
@@ -206,4 +261,4 @@ any object store works.
 | Bot silent, `/healthz` fine | `getWebhookInfo` (step 3). A laptop instance that came back up is the usual thief |
 | `502` from `/api/*` | api container unhealthy: `docker compose … logs api`, then `alembic current` |
 | Lesson starts but offers nothing | the seed did not import: re-run `deploy.sh`, or `exec api nihongo-content import-kana` |
-| Roll back | `git checkout <previous sha> && infra/scripts/deploy.sh --no-pull`. Migrations are forward-only in practice — check `alembic downgrade` is safe before relying on it |
+| Roll back | Revert the commit and merge the revert — same tests, same path. In a hurry: `su - deploy -c 'cd /opt/nihongo-tutor && git checkout <previous sha> && infra/scripts/deploy.sh --no-pull'`, which leaves the checkout detached — fine and temporary, because the next CI deploy runs `git checkout -q main` before anything else and rejoins on its own. Migrations are forward-only in practice — check `alembic downgrade` is safe before relying on it |
