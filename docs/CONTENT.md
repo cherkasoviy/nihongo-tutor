@@ -163,6 +163,23 @@ and wrong there; do not "fix" the kana seeds to match.
 Everything ships `gloss_review_status: "needs_review"` — the owner reads it and promotes it to
 `approved`, which is the point of the gate.
 
+### Tranche 2
+
+`vocab_core.json` now continues to `curriculum_order` 220. Tranche 2 (94 onward, 127 entries) adds
+demonstratives, everyday adverbs and set phrases, numbers one to ten plus 百/千/円, the days of the
+week, weather and nature, colours, home and personal objects, a second batch of verbs, body parts,
+places of work and the na-adjectives (`pos: adjective` with tag `na-adjective`, since the conjugation
+class is what the grammar stage will need, not a separate part of speech). New `pos` values are
+`adverb`, `numeral` and `determiner`.
+
+Ordering within the tranche is approximate i+1: an example sentence uses tranche-1 words and earlier
+tranche-2 words wherever possible, so the first time a learner sees 会社 the verb 働く in its
+sentence is already known. The audio budget grows by 3,104 characters for both encodings, to about
+0.73% of the free tier in total.
+
+Where a number's reading changes inside a compound, the example pins the compound: 四時 is よじ, 七時
+is しちじ, 九時 is くじ. That is the same argument as the Sudachi paragraph above, made by the data.
+
 ### What this tranche does not have yet
 
 `vocab_lemmas` in [`PLAN.md`](PLAN.md) also carries `jlpt_level`, `freq_rank`, `pitch_pattern`,
