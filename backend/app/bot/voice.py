@@ -49,10 +49,15 @@ async def send_voice(
     text: str,
     caption: str | None = None,
     keyboard: InlineKeyboardMarkup | None = None,
+    reply: bool = False,
 ) -> Message | None:
     """Send ``text`` as a voice message. Returns ``None`` if audio was not possible.
 
     A ``None`` is not an error the caller should propagate — it means "carry on without sound".
+
+    ``reply`` quotes the message it answers. Use it for a clip that follows a card — the quote is
+    what ties a sound to the syllable it belongs to when the learner scrolls back. The card's own
+    voice does not reply to anything: it *is* the card.
     """
     bot: Bot | None = message.bot
     if bot is None or not text:
@@ -82,7 +87,7 @@ async def send_voice(
 
     sent: Message | None = None
     if cached is not None:
-        sent = await _try_send(message, cached, caption, keyboard, text=text, why="cached id")
+        sent = await _try_send(message, cached, caption, keyboard, text=text, why="cached id", reply=reply)
         if sent is None:
             # A rejected id must not silence this clip forever. It is per-bot, and the documented
             # cutover restores a pg_dump into a *different* bot — so every id the dev bot minted
@@ -90,9 +95,9 @@ async def send_voice(
             # would fall back to text on every send, indistinguishable in the logs from a one-off
             # Telegram hiccup.
             log.info("cached telegram file id rejected, re-uploading", hash=clip.hash)
-            sent = await _try_send(message, bytes_on_disk, caption, keyboard, text=text, why="re-upload")
+            sent = await _try_send(message, bytes_on_disk, caption, keyboard, text=text, why="re-upload", reply=reply)
     else:
-        sent = await _try_send(message, bytes_on_disk, caption, keyboard, text=text, why="first upload")
+        sent = await _try_send(message, bytes_on_disk, caption, keyboard, text=text, why="first upload", reply=reply)
 
     if sent is None:
         return None
@@ -110,9 +115,11 @@ async def _try_send(
     *,
     text: str,
     why: str,
+    reply: bool = False,
 ) -> Message | None:
+    send = message.reply_voice if reply else message.answer_voice
     try:
-        return await message.answer_voice(voice=payload, caption=caption, reply_markup=keyboard)
+        return await send(voice=payload, caption=caption, reply_markup=keyboard)
     except TelegramAPIError as err:
         log.warning("voice not delivered", text=text, attempt=why, error=str(err))
         return None

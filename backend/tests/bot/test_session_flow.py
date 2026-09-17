@@ -7,6 +7,8 @@ an instant reaction taps again — so the same answer arrives twice, and it must
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from aiogram import Dispatcher
 from aiogram.methods import EditMessageText, SendMessage
@@ -249,7 +251,7 @@ async def test_the_intro_card_offers_its_example_and_playing_it_changes_nothing_
     bot: MockedBot,
     sessionmaker: async_sessionmaker[AsyncSession],
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: object,
+    tmp_path: Path,
 ) -> None:
     """Chat parity with the Mini App, which has had a button for the example word since audio
     landed. The chat learner could hear the syllable but never the word it lives in."""
@@ -307,3 +309,85 @@ async def test_a_failed_example_leaves_the_lesson_alone(
     assert (
         answered is not None and answered.status is StepStatus.answered
     ), "a failed example must not block the step behind it"
+
+
+async def test_the_example_is_spoken_by_its_reading_not_its_written_form(
+    dp: Dispatcher,
+    bot: MockedBot,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The rule this handler exists to follow, made testable.
+
+    Every kana example is written in kana, so `example_word` and `example_reading` are the same
+    string everywhere in the seed — which means no seeded fixture can tell a correct handler from
+    one sending the wrong field. This gives one row where they differ (雨 / あめ) so the assertion
+    has something to catch. The day vocabulary arrives, 日本 sent as the written form comes back
+    にっぽん, and that is not a failure a beginner can hear.
+    """
+    from sqlalchemy import update
+
+    from app.bot.callbacks import StepExample
+    from app.config import get_settings
+    from app.db.models.content import Kana
+    from app.speech.provider import FakeTTS
+
+    tts = FakeTTS()
+    monkeypatch.setattr("app.bot.voice._provider", lambda: tts)
+    monkeypatch.setattr(get_settings(), "audio_dir", str(tmp_path))
+
+    tg_id, user = await _learner(sessionmaker)
+    async with sessionmaker() as s:
+        await s.execute(update(Kana).values(example_word="雨", example_reading="あめ"))
+        await s.commit()
+
+    await dp.feed_update(bot, command_update(tg_id, "/today"))
+    step = await _first_open_step(sessionmaker, user.id)
+    assert step is not None and step.payload.get("mode") == "ack"
+    assert step.payload.get("example_word") == "雨", "the card should still display the kanji"
+
+    await dp.feed_update(bot, callback_update(tg_id, StepExample(step_id=step.id).pack()))
+
+    spoken = [call[0] for call in tts.calls]
+    assert "あめ" in spoken, f"the reading must be what reaches the engine; got {spoken}"
+    assert "雨" not in spoken, "the written form must never be synthesised"
+
+
+async def test_the_example_voice_says_what_it_is(
+    dp: Dispatcher,
+    bot: MockedBot,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A bare voice bubble is anonymous: tapped twice and scrolled past, it is two identical grey
+    blobs with nothing saying which word they are."""
+    from app.bot.callbacks import StepExample
+    from app.config import get_settings
+    from app.speech.provider import FakeTTS
+
+    monkeypatch.setattr("app.bot.voice._provider", FakeTTS)
+    monkeypatch.setattr(get_settings(), "audio_dir", str(tmp_path))
+
+    tg_id, user = await _learner(sessionmaker)
+    await dp.feed_update(bot, command_update(tg_id, "/today"))
+    step = await _first_open_step(sessionmaker, user.id)
+    assert step is not None
+
+    await dp.feed_update(bot, callback_update(tg_id, StepExample(step_id=step.id).pack()))
+
+    # Asserted on the example's own send. Searching every caption would pass on the *card's*
+    # caption, which already contains "Пример: {word} — {gloss}" via STEP_INTRO_KANA_EXAMPLE — so
+    # the union version passed whether _example_caption returned anything or None.
+    sends = bot.voice_sends()
+    assert len(sends) >= 2, "expected the card's voice, then the example's"
+    example = sends[-1]
+    word = str(step.payload.get("example_word"))
+    assert (
+        example.caption and word in example.caption
+    ), f"the example voice must name its word; caption was {example.caption!r}"
+
+    # And it quotes the card. aiogram 3.31 sends reply_parameters, not reply_to_message_id.
+    replied_to = getattr(getattr(example, "reply_parameters", None), "message_id", None)
+    assert replied_to is not None, "the example should reply to the card, not float free in the chat"
