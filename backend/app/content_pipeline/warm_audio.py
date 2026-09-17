@@ -50,6 +50,8 @@ def kana_texts() -> list[str]:
     for seed in load_all():
         for entry in seed.kana:
             seen.setdefault(entry.char, None)
+            # The example's *reading*, not its written form — the same rule that keeps 日本 from
+            # being synthesised as にっぽん once vocabulary arrives. For kana they coincide.
             if entry.example_reading:
                 seen.setdefault(entry.example_reading, None)
     return list(seen)

@@ -198,6 +198,8 @@ function KanaDetail({ cell, onClose }: { cell: KanaCell; onClose: () => void }) 
           <b>{cell.example_word}</b>
           {cell.example_reading && cell.example_reading !== cell.example_word && ` (${cell.example_reading})`}
           {cell.example_gloss_ru && ` — ${cell.example_gloss_ru}`}
+          {/* The example is a whole word: hearing it is where a syllable stops being a shape. */}
+          <PlayButton itemId={cell.item_id} label={cell.example_word} part="example" size="small" />
         </p>
       )}
       <p className="hint">

@@ -169,6 +169,9 @@ function Intro({ step, onNext }: { step: SessionStep; onNext: () => void }) {
         <p className={styles.example}>
           <b>{step.example_word}</b>
           {step.example_gloss_ru && ` — ${step.example_gloss_ru}`}
+          {step.item_id && (
+            <PlayButton itemId={step.item_id} label={step.example_word} part="example" size="small" />
+          )}
         </p>
       )}
       <button type="button" className={styles.next} onClick={onNext}>

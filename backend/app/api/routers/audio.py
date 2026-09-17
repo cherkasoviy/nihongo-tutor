@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 import uuid
+from enum import StrEnum
 from functools import lru_cache
 from typing import Annotated, Final
 
@@ -39,6 +40,14 @@ router = APIRouter(prefix="/audio", tags=["audio"])
 
 MEDIA_TYPES: Final = {Encoding.mp3: "audio/mpeg", Encoding.ogg: "audio/ogg"}
 DIGEST: Final = re.compile(r"^[0-9a-f]{64}$")
+
+
+class KanaPart(StrEnum):
+    """Which of a card's two speakable things is wanted."""
+
+    char = "char"
+    example = "example"
+
 
 # The clip URL names its own bytes, so they can never become stale: anything that would change them
 # changes the digest and therefore the URL. ``private`` rather than ``public`` because the route is
@@ -77,13 +86,14 @@ async def kana_audio(
     ext: str,
     user: CurrentUser,
     session: SessionDep,
+    part: Annotated[KanaPart, Query(description="The syllable itself, or its example word")] = KanaPart.char,
     slow: Annotated[bool, Query(description="The SSML prosody-rate variant")] = False,
 ) -> RedirectResponse:
-    """Resolve a syllable to its current clip, synthesising it if this is the first ask.
+    """Resolve a syllable — or its example word — to its current clip.
 
-    Sends the ``reading``, never the written form — the rule the whole content design rests on. For
-    kana the two coincide; routing it through the same field as everything else is what stops the
-    first vocabulary item being the place someone sends 日本 and gets にっぽん.
+    Sends the ``reading``, never the written form: ``example_reading``, not ``example_word``. For
+    kana the two coincide, and routing it through the reading field anyway is what stops the first
+    vocabulary item being the place someone sends 日本 and gets にっぽん.
     """
     encoding = _encoding(ext)
     row = (
@@ -94,12 +104,16 @@ async def kana_audio(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no such syllable")
 
+    text = row.char if part is KanaPart.char else (row.example_reading or "")
+    if not text:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no example for this syllable")
+
     settings = get_settings()
     try:
         clip = await audio_service.get_or_create(
             session,
             provider=_provider(),
-            text=row.char,
+            text=text,
             voice=settings.tts_voice,
             rate=settings.tts_rate,
             ssml=Ssml.slow if slow else Ssml.plain,
@@ -110,6 +124,11 @@ async def kana_audio(
         await session.commit()
     except audio_service.QuotaExceeded as err:
         log.warning("audio refused by the monthly ceiling", item_id=str(item_id), error=str(err))
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "audio temporarily unavailable") from None
+    except Exception as err:
+        # Includes DefaultCredentialsError, which is a deployment fault rather than a bug in the
+        # request. 503 is the honest answer to the learner: the sound is not available right now.
+        log.warning("audio unavailable", item_id=str(item_id), error=str(err))
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "audio temporarily unavailable") from None
 
     # 307 rather than 301/302: the method must survive, and nothing about this mapping is permanent

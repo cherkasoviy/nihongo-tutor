@@ -131,3 +131,21 @@ async def get_or_create(
     await session.flush()
     log.info("clip synthesised", hash=digest, chars=clip.billed_chars, voice=voice, ssml=ssml.value)
     return StoredClip(hash=digest, mp3_path=str(mp3), ogg_path=str(ogg), synthesized=True)
+
+
+async def remember_telegram_file_id(session: AsyncSession, *, digest: str, file_id: str) -> None:
+    """Record what Telegram called this clip, so the next send costs no upload.
+
+    The Bot API accepts a previously-uploaded ``file_id`` in place of the bytes. Without this every
+    syllable is re-uploaded on every send — the same 5 KB, hundreds of times a week — and Telegram
+    is slower about accepting an upload than about echoing an id it already has. This is the column
+    ``audio_assets.tg_file_id`` exists for.
+    """
+    row = await session.scalar(select(AudioAsset).where(AudioAsset.hash == digest))
+    if row is not None and row.tg_file_id != file_id:
+        row.tg_file_id = file_id
+        await session.flush()
+
+
+async def telegram_file_id(session: AsyncSession, *, digest: str) -> str | None:
+    return await session.scalar(select(AudioAsset.tg_file_id).where(AudioAsset.hash == digest))
