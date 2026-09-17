@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import get_settings
 from app.content_pipeline.import_kana import import_kana
 from app.db.models import UserRole
-from app.db.models.content import Item, ItemType
+from app.db.models.content import Item, ItemType, Kana
 from app.main import create_app
 from app.services import audio_service, user_service
 from app.services.user_service import TelegramIdentity
@@ -185,6 +185,51 @@ async def test_the_quota_ceiling_degrades_rather_than_erroring(
 
     monkeypatch.setattr("app.api.routers.audio._provider", FakeTTS)
     monkeypatch.setattr("app.api.routers.audio.audio_service.get_or_create", refuse)
+    headers, item_id = await _setup(client, sessionmaker)
+
+    res = await client.get(f"/api/audio/kana/{item_id}.mp3", headers=headers)
+    assert res.status_code == 503
+
+
+async def test_the_example_word_can_be_heard_too(
+    client: httpx.AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: object,
+) -> None:
+    """A syllable in isolation is a shape and a sound; the example is where it becomes a word."""
+    fake = FakeTTS()
+    monkeypatch.setattr("app.api.routers.audio._provider", lambda: fake)
+    monkeypatch.setattr(get_settings(), "audio_dir", str(tmp_path))
+    headers, item_id = await _setup(client, sessionmaker)
+
+    char = await client.get(f"/api/audio/kana/{item_id}.mp3", headers=headers, follow_redirects=True)
+    example = await client.get(f"/api/audio/kana/{item_id}.mp3?part=example", headers=headers, follow_redirects=True)
+    assert char.status_code == 200 and example.status_code == 200
+    assert char.content != example.content, "the example must not be the syllable over again"
+
+    spoken = [call[0] for call in fake.calls]
+    async with sessionmaker() as s:
+        row = await s.scalar(
+            select(Kana).join(Item, (Item.ref_id == Kana.id) & (Item.type == ItemType.kana)).where(Item.id == item_id)
+        )
+    assert row is not None
+    # The reading, never the written form. They coincide for kana; the rule is what matters.
+    assert row.example_reading in spoken
+
+
+async def test_a_missing_credential_is_a_503_not_a_500(
+    client: httpx.AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Building the client raises DefaultCredentialsError where there is no key. That is a
+    deployment fault, not a bad request, and the learner should be told the sound is unavailable."""
+
+    def no_credentials() -> FakeTTS:
+        raise RuntimeError("Your default credentials were not found")
+
+    monkeypatch.setattr("app.api.routers.audio._provider", no_credentials)
     headers, item_id = await _setup(client, sessionmaker)
 
     res = await client.get(f"/api/audio/kana/{item_id}.mp3", headers=headers)

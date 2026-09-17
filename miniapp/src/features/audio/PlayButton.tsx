@@ -20,7 +20,18 @@ import styles from './PlayButton.module.css';
  * The object URL is revoked on unmount; a blob that outlives its component is a leak the browser
  * cannot collect on its own.
  */
-export function PlayButton({ itemId, label }: { itemId: string; label: string }) {
+export function PlayButton({
+  itemId,
+  label,
+  part = 'char',
+  size = 'normal',
+}: {
+  itemId: string;
+  label: string;
+  /** The syllable itself, or the example word printed beside it. */
+  part?: 'char' | 'example';
+  size?: 'normal' | 'small';
+}) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
@@ -33,7 +44,7 @@ export function PlayButton({ itemId, label }: { itemId: string; label: string })
 
     void (async () => {
       try {
-        const src = await fetchAudioUrl(`/api/audio/kana/${itemId}.mp3`, await ensureToken());
+        const src = await fetchAudioUrl(`/api/audio/kana/${itemId}.mp3?part=${part}`, await ensureToken());
         if (!live) {
           URL.revokeObjectURL(src); // unmounted mid-flight
           return;
@@ -49,7 +60,7 @@ export function PlayButton({ itemId, label }: { itemId: string; label: string })
       live = false;
       if (created) URL.revokeObjectURL(created);
     };
-  }, [itemId]);
+  }, [itemId, part]);
 
   const play = () => {
     if (!url) return;
@@ -63,7 +74,7 @@ export function PlayButton({ itemId, label }: { itemId: string; label: string })
   return (
     <button
       type="button"
-      className={styles.play}
+      className={size === 'small' ? styles.playSmall : styles.play}
       onClick={play}
       disabled={!url && !failed}
       aria-label={`Произношение: ${label}`}

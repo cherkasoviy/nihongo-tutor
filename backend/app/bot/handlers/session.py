@@ -19,11 +19,20 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.bot import render, texts_ru
+from app.bot import render, texts_ru, voice
 from app.bot.callbacks import SessionAction, StepAck, StepChoice, StepReveal, StepSelfGrade
 from app.bot.handlers.start import identity_from_message
 from app.bot.keyboards import stop_keyboard
-from app.db.models.learning import DailyPlan, LearningSession, SessionKind, SessionStep, StepStatus, Streak
+from app.config import get_settings
+from app.db.models.learning import (
+    DailyPlan,
+    LearningSession,
+    SessionKind,
+    SessionStep,
+    StepKind,
+    StepStatus,
+    Streak,
+)
 from app.db.models.users import User, UserStatus
 from app.domain import clock
 from app.domain.grading import SelfGrade
@@ -44,7 +53,23 @@ async def _send_next(message: Message, session: AsyncSession, learning: Learning
     if step is None:
         return False
     view = render.render_step(step)
-    sent = await message.answer(view.text, reply_markup=view.keyboard)
+
+    sent: Message | None = None
+    if step.kind is StepKind.intro_item:
+        # The card *is* the voice message. A learner meeting a sound for the first time should hear
+        # it without deciding to, and one message keeps the edit-in-place design: the caption is
+        # rewritten on answer exactly as the text would have been.
+        sent = await voice.send_voice(
+            message,
+            session,
+            settings=get_settings(),
+            text=str(step.payload.get("char", "")),
+            caption=view.text,
+            keyboard=view.keyboard,
+        )
+    if sent is None:  # no audio, or audio failed: the lesson carries on silently
+        sent = await message.answer(view.text, reply_markup=view.keyboard)
+
     await session_service.mark_shown(session, step=step, now=dt.datetime.now(dt.UTC), message_id=sent.message_id)
     return True
 
@@ -142,8 +167,14 @@ async def _answer_and_advance(
 
     message = query.message
     if isinstance(message, Message):
+        feedback = render.render_feedback(step, outcome)
         try:
-            await message.edit_text(render.render_feedback(step, outcome), reply_markup=None)
+            # A voice message has a caption, not text, and edit_text on one is an error. The intro
+            # step is sent as voice, so which of these applies depends on the step kind.
+            if message.voice is not None:
+                await message.edit_caption(caption=feedback, reply_markup=None)
+            else:
+                await message.edit_text(feedback, reply_markup=None)
         except TelegramBadRequest:
             # Identical text, or a message too old to edit: not worth failing the answer over.
             log.debug("step edit skipped", step_id=str(step.id))

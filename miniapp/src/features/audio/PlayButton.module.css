@@ -9,3 +9,18 @@
   color: var(--tg-theme-button-text-color, #fff);
 }
 .play:disabled { opacity: 0.6; }
+
+/* Beside an example word, where a full-size button would dominate the line it belongs to. */
+.playSmall {
+  border: 0;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 6px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  vertical-align: middle;
+  cursor: pointer;
+  background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+  color: var(--tg-theme-text-color, #000);
+}
+.playSmall:disabled { opacity: 0.6; }
