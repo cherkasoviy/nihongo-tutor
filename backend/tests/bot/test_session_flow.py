@@ -242,3 +242,68 @@ async def test_stop_with_nothing_in_progress_creates_no_session(
     assert sessions == 0, "stopping nothing must not conjure a session to stop"
     assert await _card_count(sessionmaker, user.id) == 0
     assert await _remaining_new(sessionmaker, user.id) == before_new
+
+
+async def test_the_intro_card_offers_its_example_and_playing_it_changes_nothing_else(
+    dp: Dispatcher,
+    bot: MockedBot,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: object,
+) -> None:
+    """Chat parity with the Mini App, which has had a button for the example word since audio
+    landed. The chat learner could hear the syllable but never the word it lives in."""
+    from app.bot.callbacks import StepExample
+    from app.config import get_settings
+    from app.speech.provider import FakeTTS
+
+    tts = FakeTTS()
+    monkeypatch.setattr("app.bot.voice._provider", lambda: tts)
+    monkeypatch.setattr(get_settings(), "audio_dir", str(tmp_path))
+
+    tg_id, user = await _learner(sessionmaker)
+    await dp.feed_update(bot, command_update(tg_id, "/today"))
+    step = await _first_open_step(sessionmaker, user.id)
+    assert step is not None and step.payload.get("mode") == "ack"
+
+    before = await _counts(sessionmaker, user.id)
+    await dp.feed_update(bot, callback_update(tg_id, StepExample(step_id=step.id).pack()))
+
+    # The example word, by its reading — not the syllable over again, and not the written form.
+    spoken = [call[0] for call in tts.calls]
+    async with sessionmaker() as s:
+        row = await s.get(SessionStep, step.id)
+        assert row is not None and row.status is StepStatus.shown, "playing must not answer the step"
+    assert len(spoken) >= 1
+    assert spoken[-1] != step.payload.get("char"), "that is the syllable, not its example"
+    assert await _counts(sessionmaker, user.id) == before, "playing a sound is not progress"
+
+
+async def test_a_failed_example_leaves_the_lesson_alone(
+    dp: Dispatcher,
+    bot: MockedBot,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Audio is an addition to the card. If it cannot be produced the learner gets a toast and the
+    step is still answerable, exactly as before."""
+    from app.bot.callbacks import StepExample
+
+    def no_credentials() -> object:
+        raise RuntimeError("Your default credentials were not found")
+
+    monkeypatch.setattr("app.bot.voice._provider", no_credentials)
+
+    tg_id, user = await _learner(sessionmaker)
+    await dp.feed_update(bot, command_update(tg_id, "/today"))
+    step = await _first_open_step(sessionmaker, user.id)
+    assert step is not None
+
+    await dp.feed_update(bot, callback_update(tg_id, StepExample(step_id=step.id).pack()))
+    await dp.feed_update(bot, callback_update(tg_id, _answer_for(step)))
+
+    async with sessionmaker() as s:
+        answered = await s.get(SessionStep, step.id)
+    assert (
+        answered is not None and answered.status is StepStatus.answered
+    ), "a failed example must not block the step behind it"

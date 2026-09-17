@@ -12,6 +12,7 @@ from app.bot.callbacks import (
     SetReminder,
     StepAck,
     StepChoice,
+    StepExample,
     StepReveal,
     StepSelfGrade,
 )
@@ -65,12 +66,20 @@ def self_grade_keyboard(step_id: uuid.UUID) -> InlineKeyboardMarkup:
     )
 
 
-def ack_keyboard(step_id: uuid.UUID) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=texts_ru.BUTTON_NEXT, callback_data=StepAck(step_id=step_id).pack())]
-        ]
-    )
+def ack_keyboard(step_id: uuid.UUID, *, with_example: bool = False) -> InlineKeyboardMarkup:
+    """The introduction card's buttons.
+
+    The example button sits beside Дальше rather than on its own row: it is optional, and giving it
+    a full row would make it read as the primary action. It exists only while the step is open —
+    answering clears the keyboard, which removes it without any extra lifecycle handling.
+    """
+    row = [InlineKeyboardButton(text=texts_ru.BUTTON_NEXT, callback_data=StepAck(step_id=step_id).pack())]
+    if with_example:
+        row.insert(
+            0,
+            InlineKeyboardButton(text=texts_ru.BUTTON_PLAY_EXAMPLE, callback_data=StepExample(step_id=step_id).pack()),
+        )
+    return InlineKeyboardMarkup(inline_keyboard=[row])
 
 
 def stop_keyboard() -> InlineKeyboardMarkup:

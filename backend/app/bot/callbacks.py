@@ -38,6 +38,16 @@ class StepAck(CallbackData, prefix="ak"):
     step_id: uuid.UUID
 
 
+class StepExample(CallbackData, prefix="ex"):
+    """ "Послушать пример" on an introduction step.
+
+    Repeatable on purpose: a learner drilling a word taps it several times, and after the first
+    send Telegram is serving a cached file id, so repeats cost nothing worth protecting against.
+    """
+
+    step_id: uuid.UUID
+
+
 class SessionAction(CallbackData, prefix="ss"):
     """Session-level controls that are not tied to a single step."""
 

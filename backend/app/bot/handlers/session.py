@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
+import uuid
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -20,10 +21,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot import render, texts_ru, voice
-from app.bot.callbacks import SessionAction, StepAck, StepChoice, StepReveal, StepSelfGrade
+from app.bot.callbacks import SessionAction, StepAck, StepChoice, StepExample, StepReveal, StepSelfGrade
 from app.bot.handlers.start import identity_from_message
 from app.bot.keyboards import stop_keyboard
 from app.config import get_settings
+from app.db.models.content import Item, ItemType, Kana
 from app.db.models.learning import (
     DailyPlan,
     LearningSession,
@@ -41,6 +43,9 @@ from app.services import session_service, user_service
 
 log = get_logger(__name__)
 router = Router(name="session")
+
+# A step the learner can still act on. Anything else is history.
+_OPEN_STEP = (StepStatus.pending, StepStatus.shown)
 
 
 async def _resolve_user(session: AsyncSession, tg_user_id: int) -> User | None:
@@ -231,6 +236,56 @@ async def _summary(session: AsyncSession, *, user: User, learning: LearningSessi
         streak_word=texts_ru.streak_word(streak),
         tomorrow=texts_ru.SESSION_DONE_TOMORROW_EMPTY,
     )
+
+
+async def _example_reading(session: AsyncSession, *, item_id: uuid.UUID | None) -> str:
+    """The kana reading of a syllable's example word, or "" when there is none."""
+    if item_id is None:
+        return ""
+    row = (
+        await session.execute(
+            select(Kana).join(Item, (Item.ref_id == Kana.id) & (Item.type == ItemType.kana)).where(Item.id == item_id)
+        )
+    ).scalar_one_or_none()
+    return (row.example_reading or "") if row is not None else ""
+
+
+@router.callback_query(StepExample.filter())
+async def on_example(
+    query: CallbackQuery,
+    callback_data: StepExample,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Play the example word for an introduction card.
+
+    Closes the gap with the Mini App, which has had a button for this since audio landed: the chat
+    learner could hear the syllable but never the word it lives in.
+
+    Sends ``example_reading``, never ``example_word``. They coincide for kana; the rule is the point,
+    because the day a vocabulary item is 日本 the written form would be synthesised にっぽん.
+    """
+    message = query.message
+    async with sessionmaker() as session:
+        user = await _resolve_user(session, query.from_user.id)
+        step = await session.get(SessionStep, callback_data.step_id)
+        if user is None or step is None or not isinstance(message, Message):
+            await query.answer(texts_ru.SESSION_STEP_GONE)
+            return
+
+        learning = await session.get(LearningSession, step.session_id)
+        if learning is None or learning.user_id != user.id or step.status not in _OPEN_STEP:
+            await query.answer(texts_ru.SESSION_STEP_GONE)
+            return
+
+        # Resolved from the Kana row, not the step payload. The payload carries the example *word*
+        # for display and never carried its reading — and steps already sitting in production would
+        # not gain one, so the row is the only source that works for a lesson already in flight.
+        reading = await _example_reading(session, item_id=step.item_id)
+        sent = await voice.send_voice(message, session, settings=get_settings(), text=reading) if reading else None
+        await session.commit()
+
+    # A missing clip is a toast, not an error: the card and its buttons are untouched either way.
+    await query.answer() if sent is not None else await query.answer(texts_ru.AUDIO_UNAVAILABLE)
 
 
 @router.callback_query(StepChoice.filter())

@@ -26,7 +26,11 @@ class Rendered:
 def render_step(step: SessionStep) -> Rendered:
     payload: dict[str, Any] = step.payload
     if step.kind is StepKind.intro_item:
-        return Rendered(_intro_text(payload), keyboards.ack_keyboard(step.id))
+        # The example button only appears when there is an example to play.
+        return Rendered(
+            _intro_text(payload),
+            keyboards.ack_keyboard(step.id, with_example=bool(payload.get("example_word"))),
+        )
 
     if payload.get("mode") == "self":
         # Free recall: no options on screen, because seeing them is the answer.
