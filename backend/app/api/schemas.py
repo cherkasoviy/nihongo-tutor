@@ -133,6 +133,9 @@ class SessionStepOut(BaseModel):
     idx: int
     kind: str
     status: str
+    # The syllable behind this step, so the client can ask for its audio. Absent on steps that are
+    # not about one item; the intro step, where a learner first meets a sound, always has it.
+    item_id: uuid.UUID | None = None
     prompt: str | None = None
     char: str | None = None
     cyrillic: str | None = None

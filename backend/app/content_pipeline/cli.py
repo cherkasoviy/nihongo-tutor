@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 from pathlib import Path
 from typing import Annotated
@@ -12,6 +13,7 @@ from sqlalchemy import text
 
 from app import __version__
 from app.config import get_settings
+from app.content_pipeline import warm_audio
 from app.content_pipeline.import_kana import import_kana
 from app.db.base import get_engine, get_sessionmaker
 from app.services.progress_transfer import TransferReport, export_progress, import_progress
@@ -35,6 +37,36 @@ def check() -> None:
 
     asyncio.run(_run())
     typer.echo(f"db ok; MODEL_STRONG={settings.model_strong} MODEL_FAST={settings.model_fast}")
+
+
+@app.command("warm-audio")
+def warm_audio_command(
+    slow: Annotated[bool, typer.Option(help="Also pre-generate the slow (prosody-rate) variant")] = False,
+) -> None:
+    """Pre-generate every clip the kana seeds imply. Safe to re-run; cached clips cost nothing."""
+
+    async def _run() -> None:
+        from app.speech.google_tts import GoogleTTS
+
+        settings = get_settings()
+        async with get_sessionmaker()() as session:
+            report = await warm_audio.warm(
+                session,
+                provider=GoogleTTS(),
+                voice=settings.tts_voice,
+                rate=settings.tts_rate,
+                audio_dir=settings.audio_dir,
+                monthly_char_ceiling=settings.tts_monthly_char_ceiling,
+                now=dt.datetime.now(dt.UTC),
+                include_slow=slow,
+            )
+            await session.commit()
+        typer.echo(
+            f"synthesised {report.synthesized}, already cached {report.already_cached}, "
+            f"{report.chars} characters of new text"
+        )
+
+    asyncio.run(_run())
 
 
 @app.command("import-kana")

@@ -36,3 +36,5 @@
   background: var(--tg-theme-button-color, #2481cc);
 }
 .practice:disabled { opacity: 0.6; }
+
+.listen { display: flex; justify-content: center; margin: 0 0 16px; }
