@@ -211,6 +211,27 @@ merge to main  →  CI (backend, miniapp, infra)  →  deploy job  →  deploy-f
 The deploy job appears on pull-request runs too and is skipped there. That is deliberate: the gate
 is visible in the checks list rather than only existing on `main`.
 
+### Bootstrapping it on a new host
+
+The forced command runs `infra/scripts/deploy-from-ci.sh` **from the checkout**, so the checkout has
+to already contain it. On a host that has never deployed, or one whose `main` predates that script,
+the very first CI deploy fails before it starts:
+
+```
+bash: /opt/nihongo-tutor/infra/scripts/deploy-from-ci.sh: No such file or directory
+exit 127
+```
+
+That is the script that pulls the code being part of the code it pulls. Nothing is wrong with the
+key, the host pin or the forced command — they all worked to get as far as that message. Break the
+cycle once, by hand:
+
+```bash
+su - deploy -c 'cd /opt/nihongo-tutor && git fetch origin main && git merge --ff-only origin/main'
+```
+
+Then re-run the failed job. Every deploy after that is automatic.
+
 ### What the CI key can do
 
 Exactly one thing. The key is a forced command in the `deploy` user's `authorized_keys`, so a
