@@ -14,6 +14,7 @@ from app.config import Settings, get_settings
 from app.content_pipeline.import_kana import import_kana
 from app.db.models.audio import AudioAsset
 from app.services import audio_service
+from app.speech.keys import Ssml, clip_hash
 from app.speech.provider import FakeTTS
 
 pytestmark = pytest.mark.integration
@@ -30,20 +31,28 @@ class FakeSent:
 
 
 class FakeMessage:
-    """Just enough Message to record what the bot tried to send."""
+    """Just enough Message to record what the bot tried to send.
 
-    def __init__(self, *, fail: bool = False) -> None:
+    ``reject_ids`` models the thing that actually happens: Telegram refuses a file id minted by a
+    different bot, but accepts the bytes.
+    """
+
+    def __init__(self, *, fail: bool = False, reject_ids: bool = False, mint: str = "tg-file-id-1") -> None:
         self.bot = object()
         self.sent: list[Any] = []
         self.fail = fail
+        self.reject_ids = reject_ids
+        self.mint = mint
 
     async def answer_voice(self, *, voice: Any, caption: str | None = None, reply_markup: Any = None) -> FakeSent:
-        if self.fail:
-            from aiogram.exceptions import TelegramAPIError
+        from aiogram.exceptions import TelegramAPIError
 
+        if self.fail:
             raise TelegramAPIError(method=None, message="nope")  # type: ignore[arg-type]
         self.sent.append(voice)
-        return FakeSent("tg-file-id-1")
+        if self.reject_ids and isinstance(voice, str):
+            raise TelegramAPIError(method=None, message="wrong file identifier")  # type: ignore[arg-type]
+        return FakeSent(self.mint)
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -134,5 +143,62 @@ async def test_no_credentials_at_all_still_teaches(
     async with sessionmaker() as s:
         sent = await voice.send_voice(
             FakeMessage(), s, settings=_settings(tmp_path), text="あ"  # type: ignore[arg-type]
+        )
+    assert sent is None
+
+
+async def test_a_rejected_file_id_re_uploads_and_heals_the_row(
+    sessionmaker: async_sessionmaker[AsyncSession], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """File ids are per-bot, and the documented cutover restores a pg_dump into a *different* bot —
+    so every id the dev bot minted arrives at the prod bot dead. Without a retry each of those clips
+    falls back to text on every send, forever, and looks like a one-off Telegram hiccup in the logs.
+    """
+    tts = FakeTTS()
+    monkeypatch.setattr("app.bot.voice._provider", lambda: tts)
+    settings = _settings(tmp_path)
+    async with sessionmaker() as s:
+        await import_kana(s)
+        await s.commit()
+
+    # One good send, then poison the stored id the way a restore from another bot would.
+    async with sessionmaker() as s:
+        await voice.send_voice(FakeMessage(), s, settings=settings, text="あ")  # type: ignore[arg-type]
+        await s.commit()
+    # Addressed by digest, not "the only row": the suite shares one database and other tests
+    # synthesise too.
+    digest = clip_hash(provider=tts.name, voice=settings.tts_voice, rate=settings.tts_rate, ssml=Ssml.plain, text="あ")
+    async with sessionmaker() as s:
+        row = await s.scalar(select(AudioAsset).where(AudioAsset.hash == digest))
+        assert row is not None
+        row.tg_file_id = "dead-id-from-the-dev-bot"
+        await s.commit()
+
+    message = FakeMessage(reject_ids=True, mint="tg-file-id-fresh")
+    async with sessionmaker() as s:
+        sent = await voice.send_voice(message, s, settings=settings, text="あ")  # type: ignore[arg-type]
+        await s.commit()
+
+    assert sent is not None, "the voice must still arrive"
+    assert message.sent[0] == "dead-id-from-the-dev-bot", "it should try the cached id first"
+    assert not isinstance(message.sent[1], str), "then fall back to the bytes"
+    assert len(tts.calls) == 1, "and re-uploading must not re-synthesise"
+
+    async with sessionmaker() as s:
+        healed = await s.scalar(select(AudioAsset.tg_file_id).where(AudioAsset.hash == digest))
+    assert healed == "tg-file-id-fresh", "the dead id must be overwritten, not merely supplemented"
+
+
+async def test_a_clip_that_fails_both_ways_falls_back_to_text(
+    sessionmaker: async_sessionmaker[AsyncSession], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The retry must not turn a genuine outage into an exception."""
+    monkeypatch.setattr("app.bot.voice._provider", FakeTTS)
+    async with sessionmaker() as s:
+        await import_kana(s)
+        await s.commit()
+    async with sessionmaker() as s:
+        sent = await voice.send_voice(
+            FakeMessage(fail=True), s, settings=_settings(tmp_path), text="あ"  # type: ignore[arg-type]
         )
     assert sent is None

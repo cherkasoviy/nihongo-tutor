@@ -77,14 +77,42 @@ async def send_voice(
         log.warning("voice skipped: synthesis failed", text=text, error=str(err))
         return None
 
+    bytes_on_disk = FSInputFile(Path(clip.path_for(Encoding.ogg)))
     cached = await audio_service.telegram_file_id(session, digest=clip.hash)
-    payload: str | FSInputFile = cached or FSInputFile(Path(clip.path_for(Encoding.ogg)))
-    try:
-        sent = await message.answer_voice(voice=payload, caption=caption, reply_markup=keyboard)
-    except TelegramAPIError as err:
-        log.warning("voice not delivered", text=text, error=str(err))
-        return None
 
-    if sent.voice is not None:
+    sent: Message | None = None
+    if cached is not None:
+        sent = await _try_send(message, cached, caption, keyboard, text=text, why="cached id")
+        if sent is None:
+            # A rejected id must not silence this clip forever. It is per-bot, and the documented
+            # cutover restores a pg_dump into a *different* bot — so every id the dev bot minted
+            # arrives at the prod bot, dead on arrival. Without this retry each of those clips
+            # would fall back to text on every send, indistinguishable in the logs from a one-off
+            # Telegram hiccup.
+            log.info("cached telegram file id rejected, re-uploading", hash=clip.hash)
+            sent = await _try_send(message, bytes_on_disk, caption, keyboard, text=text, why="re-upload")
+    else:
+        sent = await _try_send(message, bytes_on_disk, caption, keyboard, text=text, why="first upload")
+
+    if sent is None:
+        return None
+    if sent.voice is not None and sent.voice.file_id != cached:
+        # Overwrites the dead id rather than merely adding one, so the row heals.
         await audio_service.remember_telegram_file_id(session, digest=clip.hash, file_id=sent.voice.file_id)
     return sent
+
+
+async def _try_send(
+    message: Message,
+    payload: str | FSInputFile,
+    caption: str | None,
+    keyboard: InlineKeyboardMarkup | None,
+    *,
+    text: str,
+    why: str,
+) -> Message | None:
+    try:
+        return await message.answer_voice(voice=payload, caption=caption, reply_markup=keyboard)
+    except TelegramAPIError as err:
+        log.warning("voice not delivered", text=text, attempt=why, error=str(err))
+        return None
