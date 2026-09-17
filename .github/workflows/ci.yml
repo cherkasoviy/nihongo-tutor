@@ -101,3 +101,34 @@ jobs:
           if git ls-files | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.env\.example$'; then
             echo "::error::.env file committed"; exit 1
           fi
+
+  deploy:
+    name: deploy to production
+    needs: [backend, miniapp, infra]
+    # Appears on pull-request runs too, skipped by this condition. That is deliberate: the gate is
+    # visible in the checks list rather than only existing on main.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://tutor.kolenos.top
+    concurrency:
+      # Never cancelled. A half-applied deploy is worse than a queued one: cancelling mid-run could
+      # leave migrations applied against the previous images.
+      group: production
+      cancel-in-progress: false
+    steps:
+      # No checkout. The runner needs nothing from the repo — only the key, and the sha it already
+      # has in the context. The server fetches the code itself.
+      - name: deploy ${{ github.sha }}
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # StrictHostKeyChecking=yes against a pinned known_hosts, deliberately: a job that
+          # accepted any host key would hand the deploy key to whoever answered on that name.
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "deploy@$HOST" "${{ github.sha }}"
