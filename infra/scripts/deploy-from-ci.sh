@@ -19,10 +19,20 @@ fi
 cd /opt/nihongo-tutor
 
 git fetch origin main
+
+# The real guard: the sha has to be on origin/main.
+#
+# --ff-only alone is not that. It only proves the sha descends from whatever this checkout happens
+# to be on, and the object store here is not clean — every past manual deploy ran a bare `git pull`,
+# whose default refspec drags every claude/** branch tip into it. So an unmerged feature branch that
+# descends from main would satisfy --ff-only and be deployed without ever having been reviewed.
+if ! git merge-base --is-ancestor "$SHA" origin/main; then
+    echo "refusing: ${SHA} is not on origin/main" >&2
+    exit 3
+fi
+
 git checkout -q main
-# --ff-only is the substance of the guard. It deploys exactly the commit CI tested, and refuses
-# anything that is not already an ancestor-or-equal of origin/main — so a valid-looking sha from a
-# fork, a branch, or a rewritten history is rejected rather than checked out and run.
+# Belt to the check above's braces: this would also catch a local main that had somehow diverged.
 git merge --ff-only "$SHA"
 
 # Without --no-pull, deploy.sh would pull main again and could land on something newer than the

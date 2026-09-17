@@ -219,8 +219,13 @@ agent forwarding. The commit sha arrives in `SSH_ORIGINAL_COMMAND` and is the on
 that key could vary, so it is validated twice:
 
 - it must match `^[0-9a-f]{40}$` — anchored, exactly forty characters, lower case;
-- and it must be a fast-forward of `origin/main`, which is what makes "deploy the commit CI tested"
-  true rather than aspirational. A sha from a fork, a branch or a rewritten history is refused.
+- and `git merge-base --is-ancestor` must place it **on `origin/main`**. This is the check that
+  makes "deploy the commit CI tested" true rather than aspirational, and `--ff-only` is not a
+  substitute for it: that only proves the sha descends from whatever the checkout is on, and this
+  object store is not clean — every past manual deploy ran a bare `git pull`, which drags every
+  `claude/**` branch tip into it. Without the ancestor check an unmerged feature branch descending
+  from main would have satisfied `--ff-only` and been deployed unreviewed. The `--ff-only` merge
+  stays as a second line, against a local `main` that had somehow diverged.
 
 The runner never checks out the repository. It needs the key and the sha; the server fetches its own
 code.
@@ -230,7 +235,9 @@ code.
 Revert the commit and merge the revert. That is a normal deploy of a normal commit, and it goes
 through the same tests — which is the point of not having a separate rollback path to get wrong.
 
-For something faster, the manual path below still works.
+For something faster, the manual path below still works. Checking out a bare sha leaves the
+checkout detached, which is fine and temporary: the next CI deploy runs `git checkout -q main`
+before anything else, so it rejoins by itself on the following merge.
 
 ### Deploying by hand, for emergencies
 
@@ -254,4 +261,4 @@ user's reach to exactly the checkout it deploys.
 | Bot silent, `/healthz` fine | `getWebhookInfo` (step 3). A laptop instance that came back up is the usual thief |
 | `502` from `/api/*` | api container unhealthy: `docker compose … logs api`, then `alembic current` |
 | Lesson starts but offers nothing | the seed did not import: re-run `deploy.sh`, or `exec api nihongo-content import-kana` |
-| Roll back | Revert the commit and merge the revert — same tests, same path. In a hurry: `su - deploy -c 'cd /opt/nihongo-tutor && git checkout <previous sha> && infra/scripts/deploy.sh --no-pull'`, remembering the next merge to main will move it forward again. Migrations are forward-only in practice — check `alembic downgrade` is safe before relying on it |
+| Roll back | Revert the commit and merge the revert — same tests, same path. In a hurry: `su - deploy -c 'cd /opt/nihongo-tutor && git checkout <previous sha> && infra/scripts/deploy.sh --no-pull'`, which leaves the checkout detached — fine and temporary, because the next CI deploy runs `git checkout -q main` before anything else and rejoins on its own. Migrations are forward-only in practice — check `alembic downgrade` is safe before relying on it |

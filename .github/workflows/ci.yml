@@ -117,6 +117,10 @@ jobs:
       # leave migrations applied against the previous images.
       group: production
       cancel-in-progress: false
+    # Because the group is never cancelled, a hung ssh or a stuck build would hold it for the
+    # six-hour default and queue every later merge behind it. A real deploy is a few minutes;
+    # 30 leaves room for the Vite build on a 2 GB box having a bad day.
+    timeout-minutes: 30
     steps:
       # No checkout. The runner needs nothing from the repo — only the key, and the sha it already
       # has in the context. The server fetches the code itself.
@@ -125,10 +129,13 @@ jobs:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           HOST: ${{ secrets.DEPLOY_HOST }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          # Through env like the rest, not interpolated into the script. It is hex today, so this
+          # is habit rather than a fix — but the habit is what stops the one that is not.
+          SHA: ${{ github.sha }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           # StrictHostKeyChecking=yes against a pinned known_hosts, deliberately: a job that
           # accepted any host key would hand the deploy key to whoever answered on that name.
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "deploy@$HOST" "${{ github.sha }}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "deploy@$HOST" "$SHA"
