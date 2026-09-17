@@ -307,3 +307,82 @@ async def test_a_failed_example_leaves_the_lesson_alone(
     assert (
         answered is not None and answered.status is StepStatus.answered
     ), "a failed example must not block the step behind it"
+
+
+async def test_the_example_is_spoken_by_its_reading_not_its_written_form(
+    dp: Dispatcher,
+    bot: MockedBot,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: object,
+) -> None:
+    """The rule this handler exists to follow, made testable.
+
+    Every kana example is written in kana, so `example_word` and `example_reading` are the same
+    string everywhere in the seed — which means no seeded fixture can tell a correct handler from
+    one sending the wrong field. This gives one row where they differ (雨 / あめ) so the assertion
+    has something to catch. The day vocabulary arrives, 日本 sent as the written form comes back
+    にっぽん, and that is not a failure a beginner can hear.
+    """
+    from sqlalchemy import update
+
+    from app.bot.callbacks import StepExample
+    from app.config import get_settings
+    from app.db.models.content import Kana
+    from app.speech.provider import FakeTTS
+
+    tts = FakeTTS()
+    monkeypatch.setattr("app.bot.voice._provider", lambda: tts)
+    monkeypatch.setattr(get_settings(), "audio_dir", str(tmp_path))
+
+    tg_id, user = await _learner(sessionmaker)
+    async with sessionmaker() as s:
+        await s.execute(update(Kana).values(example_word="雨", example_reading="あめ"))
+        await s.commit()
+
+    await dp.feed_update(bot, command_update(tg_id, "/today"))
+    step = await _first_open_step(sessionmaker, user.id)
+    assert step is not None and step.payload.get("mode") == "ack"
+    assert step.payload.get("example_word") == "雨", "the card should still display the kanji"
+
+    await dp.feed_update(bot, callback_update(tg_id, StepExample(step_id=step.id).pack()))
+
+    spoken = [call[0] for call in tts.calls]
+    assert "あめ" in spoken, f"the reading must be what reaches the engine; got {spoken}"
+    assert "雨" not in spoken, "the written form must never be synthesised"
+
+
+async def test_the_example_voice_says_what_it_is(
+    dp: Dispatcher,
+    bot: MockedBot,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: object,
+) -> None:
+    """A bare voice bubble is anonymous: tapped twice and scrolled past, it is two identical grey
+    blobs with nothing saying which word they are."""
+    from app.bot.callbacks import StepExample
+    from app.config import get_settings
+    from app.speech.provider import FakeTTS
+
+    monkeypatch.setattr("app.bot.voice._provider", FakeTTS)
+    monkeypatch.setattr(get_settings(), "audio_dir", str(tmp_path))
+
+    tg_id, user = await _learner(sessionmaker)
+    await dp.feed_update(bot, command_update(tg_id, "/today"))
+    step = await _first_open_step(sessionmaker, user.id)
+    assert step is not None
+
+    await dp.feed_update(bot, callback_update(tg_id, StepExample(step_id=step.id).pack()))
+
+    captions = [c for c in bot.sent_captions() if c]
+    word = str(step.payload.get("example_word"))
+    assert any(word in c for c in captions), f"no caption named the word; captions were {captions}"
+
+    # And it quotes the card. Without a caption that link was the only thing tying a sound to its
+    # syllable; with one it is still what makes yesterday's history readable.
+    sends = bot.voice_sends()
+    assert sends, "no voice was sent"
+    # aiogram 3.31 sends reply_parameters, not the older reply_to_message_id.
+    replied_to = getattr(getattr(sends[-1], "reply_parameters", None), "message_id", None)
+    assert replied_to is not None, "the example should reply to the card, not float free in the chat"

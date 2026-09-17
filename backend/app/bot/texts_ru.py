@@ -241,3 +241,9 @@ TTS_QUOTA_NOTE = {
 # Audio is an addition to the card, never a precondition for it, so a failure is a toast rather
 # than an error — the lesson carries on exactly as it was.
 AUDIO_UNAVAILABLE = "Звук сейчас недоступен."
+
+# What a voice message of an example word says about itself. Without it the chat fills with
+# anonymous bubbles: she taps twice, scrolls back tomorrow, and finds two identical grey blobs with
+# nothing saying which word they are. The Mini App prints the word beside its button; this is that.
+VOICE_EXAMPLE_CAPTION = "Пример: {word} — {gloss}"
+VOICE_EXAMPLE_CAPTION_BARE = "Пример: {word}"

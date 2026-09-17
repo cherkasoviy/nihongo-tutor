@@ -84,5 +84,13 @@ class MockedBot(Bot):
     def sent_texts(self) -> list[str]:
         return [str(getattr(m, "text", "")) for m in self.mocked.requests if m.__api_method__ == "sendMessage"]
 
+    def sent_captions(self) -> list[str]:
+        """Captions on anything sent with media — a voice card's text lives here, not in ``text``."""
+        return [str(getattr(m, "caption", "") or "") for m in self.mocked.requests if hasattr(m, "caption")]
+
+    def voice_sends(self) -> list[object]:
+        """Every sendVoice request, in order, so a test can see reply targets and payload kinds."""
+        return [m for m in self.mocked.requests if m.__api_method__ == "sendVoice"]
+
 
 __all__ = ["MockedBot", "MockedSession", "ResponseParameters"]

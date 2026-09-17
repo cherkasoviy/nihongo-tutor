@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import datetime as dt
 import uuid
+from typing import Any
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -238,6 +239,21 @@ async def _summary(session: AsyncSession, *, user: User, learning: LearningSessi
     )
 
 
+def _example_caption(payload: dict[str, Any]) -> str | None:
+    """What the voice message says it is.
+
+    A bare voice bubble is anonymous: tapped twice and scrolled past, it is two identical grey
+    blobs. The card prints the word next to the button; the caption is the chat's version of that.
+    """
+    word = payload.get("example_word")
+    if not word:
+        return None
+    gloss = payload.get("example_gloss_ru")
+    if gloss:
+        return texts_ru.VOICE_EXAMPLE_CAPTION.format(word=word, gloss=gloss)
+    return texts_ru.VOICE_EXAMPLE_CAPTION_BARE.format(word=word)
+
+
 async def _example_reading(session: AsyncSession, *, item_id: uuid.UUID | None) -> str:
     """The kana reading of a syllable's example word, or "" when there is none."""
     if item_id is None:
@@ -281,7 +297,19 @@ async def on_example(
         # for display and never carried its reading — and steps already sitting in production would
         # not gain one, so the row is the only source that works for a lesson already in flight.
         reading = await _example_reading(session, item_id=step.item_id)
-        sent = await voice.send_voice(message, session, settings=get_settings(), text=reading) if reading else None
+        sent = (
+            await voice.send_voice(
+                message,
+                session,
+                settings=get_settings(),
+                text=reading,
+                caption=_example_caption(step.payload),
+                # Quotes the card, so a sound in yesterday's history still points at its syllable.
+                reply=True,
+            )
+            if reading
+            else None
+        )
         await session.commit()
 
     # A missing clip is a toast, not an error: the card and its buttons are untouched either way.
