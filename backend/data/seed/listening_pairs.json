@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "kind": "listening_pairs",
+  "note": "Minimal pairs for listening drills, chosen for a Russian-speaking learner specifically. Russian has no phonemic vowel length and no phonemic gemination, so these are contrasts she is effectively deaf to until drilled — a beginner will hear おばさん and おばあさん as the same word. `contrast` says which feature the pair isolates. These are word-level, which is why the kana seed cannot express them: `domain/distractors.py` handles single-syllable confusion, visual and same-row, and neither covers length, gemination or pitch. Intended for `listen_choose`: play one member, show both, ask which was said. `gloss_source`/`gloss_review_status` follow the vocab_lemmas column names in docs/PLAN.md.",
+  "pairs": [
+    {
+      "slug": "pair:obasan-obaasan",
+      "contrast": "vowel_length",
+      "a": { "word": "おばさん", "reading": "おばさん", "gloss_ru": "тётя" },
+      "b": { "word": "おばあさん", "reading": "おばあさん", "gloss_ru": "бабушка" },
+      "note_ru": "Долгий гласный — отдельный звук, а не «то же самое, но протяжнее». Разница в одну мору меняет поколение.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:ojisan-ojiisan",
+      "contrast": "vowel_length",
+      "a": { "word": "おじさん", "reading": "おじさん", "gloss_ru": "дядя" },
+      "b": { "word": "おじいさん", "reading": "おじいさん", "gloss_ru": "дедушка" },
+      "note_ru": "Та же пара, что тётя/бабушка, но с другим гласным. Полезно слушать их подряд.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:biru-biiru",
+      "contrast": "vowel_length",
+      "a": { "word": "ビル", "reading": "ビル", "gloss_ru": "здание" },
+      "b": { "word": "ビール", "reading": "ビール", "gloss_ru": "пиво" },
+      "note_ru": "В катакане долгота обозначается чертой ー. Заказать в кафе не то — классическая ошибка.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:yuki-yuuki",
+      "contrast": "vowel_length",
+      "a": { "word": "雪", "reading": "ゆき", "gloss_ru": "снег" },
+      "b": { "word": "勇気", "reading": "ゆうき", "gloss_ru": "смелость" },
+      "note_ru": "Долгота в первом слоге. По-русски оба слышатся как «юки».",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:toru-tooru",
+      "contrast": "vowel_length",
+      "a": { "word": "取る", "reading": "とる", "gloss_ru": "брать" },
+      "b": { "word": "通る", "reading": "とおる", "gloss_ru": "проходить" },
+      "note_ru": "Два разных глагола. Долгота здесь записывается через お, а не через ー.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:kuro-kurou",
+      "contrast": "vowel_length",
+      "a": { "word": "黒", "reading": "くろ", "gloss_ru": "чёрный цвет" },
+      "b": { "word": "苦労", "reading": "くろう", "gloss_ru": "трудности; хлопоты" },
+      "note_ru": "Долгота в конце слова слышится хуже всего — её легче всего пропустить.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:seki-seiki",
+      "contrast": "vowel_length",
+      "a": { "word": "席", "reading": "せき", "gloss_ru": "место (сидячее)" },
+      "b": { "word": "世紀", "reading": "せいき", "gloss_ru": "век; столетие" },
+      "note_ru": "えい произносится как долгое «э», а не как «эй».",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:oi-ooi",
+      "contrast": "vowel_length",
+      "a": { "word": "甥", "reading": "おい", "gloss_ru": "племянник" },
+      "b": { "word": "多い", "reading": "おおい", "gloss_ru": "многочисленный" },
+      "note_ru": "Здесь долгота в самом начале — слушай первую мору.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:kite-kitte",
+      "contrast": "geminate",
+      "a": { "word": "来て", "reading": "きて", "gloss_ru": "приходи" },
+      "b": { "word": "切手", "reading": "きって", "gloss_ru": "почтовая марка" },
+      "note_ru": "っ — это пауза длиной в мору, а не удвоенная согласная как в русском «ванна». Молчание тоже звук.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:neko-nekko",
+      "contrast": "geminate",
+      "a": { "word": "猫", "reading": "ねこ", "gloss_ru": "кошка" },
+      "b": { "word": "根っこ", "reading": "ねっこ", "gloss_ru": "корень" },
+      "note_ru": "Слово ты уже знаешь — тем легче услышать, что добавилось.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:saka-sakka",
+      "contrast": "geminate",
+      "a": { "word": "坂", "reading": "さか", "gloss_ru": "склон; горка" },
+      "b": { "word": "作家", "reading": "さっか", "gloss_ru": "писатель" },
+      "gloss_source": "claude",
+      "note_ru": "Пауза перед か. Попробуй произнести оба и почувствовать разницу в длине.",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:ita-itta",
+      "contrast": "geminate",
+      "a": { "word": "いた", "reading": "いた", "gloss_ru": "был; находился" },
+      "b": { "word": "行った", "reading": "いった", "gloss_ru": "пошёл; поехал" },
+      "note_ru": "Две очень частые формы. Здесь っ решает, о чём вообще речь.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:oto-otto",
+      "contrast": "geminate",
+      "a": { "word": "音", "reading": "おと", "gloss_ru": "звук" },
+      "b": { "word": "夫", "reading": "おっと", "gloss_ru": "муж" },
+      "note_ru": "Пауза перед と.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:kata-katta",
+      "contrast": "geminate",
+      "a": { "word": "肩", "reading": "かた", "gloss_ru": "плечо" },
+      "b": { "word": "買った", "reading": "かった", "gloss_ru": "купил(а)" },
+      "note_ru": "Прошедшее время многих глаголов содержит っ — этот контраст будет встречаться постоянно.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:shite-shitte",
+      "contrast": "geminate",
+      "a": { "word": "して", "reading": "して", "gloss_ru": "делая; сделай" },
+      "b": { "word": "知って", "reading": "しって", "gloss_ru": "зная" },
+      "note_ru": "Оба глагола из самых частых. Разница только в паузе.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:buka-bukka",
+      "contrast": "geminate",
+      "a": { "word": "部下", "reading": "ぶか", "gloss_ru": "подчинённый" },
+      "b": { "word": "物価", "reading": "ぶっか", "gloss_ru": "цены" },
+      "note_ru": "Пауза перед か, как в 坂／作家.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:ame-ame",
+      "contrast": "pitch",
+      "a": { "word": "雨", "reading": "あめ", "gloss_ru": "дождь" },
+      "b": { "word": "飴", "reading": "あめ", "gloss_ru": "леденец" },
+      "note_ru": "Читаются одинаково — различает только тон. В 雨 тон падает после первой моры, в 飴 нет.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:hashi-hashi",
+      "contrast": "pitch",
+      "a": { "word": "橋", "reading": "はし", "gloss_ru": "мост" },
+      "b": { "word": "箸", "reading": "はし", "gloss_ru": "палочки для еды" },
+      "note_ru": "Самая известная пара японского тонального ударения. По записи каной они неразличимы.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:kaki-kaki",
+      "contrast": "pitch",
+      "a": { "word": "柿", "reading": "かき", "gloss_ru": "хурма" },
+      "b": { "word": "牡蠣", "reading": "かき", "gloss_ru": "устрица" },
+      "note_ru": "Ещё одна пара, где помогает только тон — и контекст.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:kin-gin",
+      "contrast": "voicing",
+      "a": { "word": "金", "reading": "きん", "gloss_ru": "золото" },
+      "b": { "word": "銀", "reading": "ぎん", "gloss_ru": "серебро" },
+      "note_ru": "Нигори (два штриха) озвончает согласную. Для русского уха это лёгкий контраст — хорошая разминка перед трудными.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:futa-buta",
+      "contrast": "voicing",
+      "a": { "word": "蓋", "reading": "ふた", "gloss_ru": "крышка" },
+      "b": { "word": "豚", "reading": "ぶた", "gloss_ru": "свинья" },
+      "note_ru": "ふ — не русское «ф»: губы сближаются, но зубы не участвуют. Отсюда и путаница с ぶ.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    },
+    {
+      "slug": "pair:kaki-kagi",
+      "contrast": "voicing",
+      "a": { "word": "柿", "reading": "かき", "gloss_ru": "хурма" },
+      "b": { "word": "鍵", "reading": "かぎ", "gloss_ru": "ключ" },
+      "note_ru": "Озвончение во втором слоге слышно хуже, чем в первом.",
+      "gloss_source": "claude",
+      "gloss_review_status": "needs_review"
+    }
+  ]
+}
