@@ -70,6 +70,42 @@ rebuilding it.
 Then in @BotFather: `/newapp` → the bot → title, description, a 640×360 image → Web App URL
 `https://<domain>`. Without this the Mini App button has nowhere to open.
 
+## 2a. The Google credential, if the AI layer is in use
+
+One service account authenticates Vertex, Text-to-Speech and Speech-to-Text alike, so there is one
+key and no Anthropic or OpenAI key anywhere. Note there is **no `roles/texttospeech.*` role in GCP
+at all** — Text-to-Speech authorises on valid credentials plus the enabled API, so the account
+carries `aiplatform.user`, `speech.client` and `serviceusage.serviceUsageConsumer` and nothing for
+TTS. Listing voices is the cheapest proof it works, and it is free.
+
+Put the key at `/etc/nihongo/google-sa.json`, never in the repo tree: `/opt/nihongo-tutor` is a
+checkout `deploy.sh` pulls into, so a credential there is one `git add -A` from being public.
+
+**Own it by the container's user, not by root.** The api and worker containers run unprivileged, and
+a root-owned `0600` key mounts perfectly and is then unreadable — the stack comes up healthy, every
+smoke test passes, and the failure appears only when a learner taps a syllable and gets silence:
+
+```bash
+docker inspect nihongo-backend:local --format '{{.Config.User}}'      # the image's user
+docker compose -f infra/docker-compose.yml --env-file infra/.env exec -T api id -u
+chown <that uid>:<that uid> /etc/nihongo/google-sa.json
+chmod 600 /etc/nihongo/google-sa.json
+```
+
+Do not reach for the host's group of the same number: on Ubuntu 24.04 gid 999 is `systemd-journal`,
+which has nothing to do with this and would be a coincidence to depend on. `deploy.sh` checks
+readability from inside the container and stops with the exact `chown` if it is wrong.
+
+Then warm the audio, which is also the first thing that actually exercises the mount:
+
+```bash
+docker compose -f infra/docker-compose.yml --env-file infra/.env exec -T api nihongo-content warm-audio
+```
+
+Correct result: `synthesised 414, already cached 0, 975 characters of new text` on a cold volume,
+and `synthesised 0, already cached 414` on any re-run. That is 1,950 billed characters — two per
+clip, one request per encoding — against a 1,000,000-character monthly free tier for Neural2 voices.
+
 ## 3. Hand the webhook over from the laptop
 
 **A bot token has exactly one webhook URL.** Development pointed it at an ephemeral cloudflared
