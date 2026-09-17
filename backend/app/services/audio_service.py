@@ -86,6 +86,12 @@ async def get_or_create(
         return StoredClip(hash=digest, mp3_path=str(mp3), ogg_path=str(ogg), synthesized=False)
 
     spent = await chars_this_month(session, now=now)
+    # Deliberately check-then-act, with no lock. Two concurrent misses on *different* texts could
+    # both pass this and both synthesise, overshooting the ceiling by one request. That is fine and
+    # is meant to stay fine: the ceiling exists to stop a runaway loop, not to enforce a budget to
+    # the character, and full seed coverage is ~4,200 characters against a 200,000 ceiling. Anyone
+    # reaching for a lock here should first have a reason the overshoot actually costs something.
+    #
     # Checked before the call against a conservative estimate, then recorded from what the provider
     # says it actually sent. Estimating low here would let a single oversized request through; the
     # ledger is what has to be exact, and only the provider knows the real figure.

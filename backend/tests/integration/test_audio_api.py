@@ -69,11 +69,75 @@ async def test_a_syllable_can_be_heard(
     monkeypatch.setattr(get_settings(), "audio_dir", str(tmp_path))
     headers, item_id = await _setup(client, sessionmaker)
 
-    res = await client.get(f"/api/audio/kana/{item_id}.mp3", headers=headers)
+    res = await client.get(f"/api/audio/kana/{item_id}.mp3", headers=headers, follow_redirects=True)
     assert res.status_code == 200, res.text
     assert res.headers["content-type"] == "audio/mpeg"
     assert res.content.startswith(b"FAKEMP3")
-    assert "immutable" in res.headers.get("cache-control", "")
+
+
+async def test_only_the_content_addressed_url_is_cached_forever(
+    client: httpx.AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: object,
+) -> None:
+    """The digest covers voice, rate and SSML template, so the clip URL can never go stale. The item
+    URL is exactly what a voice change has to move, and caching it hard would pin every device that
+    ever tapped a syllable to the old voice for a year, unreachably."""
+    monkeypatch.setattr("app.api.routers.audio._provider", FakeTTS)
+    monkeypatch.setattr(get_settings(), "audio_dir", str(tmp_path))
+    headers, item_id = await _setup(client, sessionmaker)
+
+    item = await client.get(f"/api/audio/kana/{item_id}.mp3", headers=headers)
+    assert item.status_code == 307
+    assert "no-cache" in item.headers["cache-control"]
+    assert "immutable" not in item.headers["cache-control"]
+
+    location = item.headers["location"]
+    assert location.startswith("/api/audio/clips/")
+    clip = await client.get(location, headers=headers)
+    assert clip.status_code == 200
+    assert "immutable" in clip.headers["cache-control"]
+    # Authenticated responses have no business in a shared cache, even for something unsecret.
+    assert "private" in clip.headers["cache-control"]
+    assert "public" not in clip.headers["cache-control"]
+
+
+async def test_a_clip_address_that_is_not_a_digest_is_refused(
+    client: httpx.AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    headers, _ = await _setup(client, sessionmaker)
+    for bad in ("../../etc/passwd", "nothex", "a" * 63):
+        res = await client.get(f"/api/audio/clips/{bad}.mp3", headers=headers)
+        assert res.status_code == 404, bad
+
+
+async def test_the_client_is_built_once_not_per_request(
+    client: httpx.AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: object,
+) -> None:
+    """Almost every request is a cache hit, which needs nothing from the provider but its name.
+    Constructing a gRPC client for each of those is pure waste."""
+    from app.api.routers import audio as audio_router
+
+    audio_router._provider.cache_clear()
+    built = 0
+
+    def factory() -> FakeTTS:
+        nonlocal built
+        built += 1
+        return FakeTTS()
+
+    monkeypatch.setattr("app.speech.google_tts.GoogleTTS", factory)
+    monkeypatch.setattr(get_settings(), "audio_dir", str(tmp_path))
+    headers, item_id = await _setup(client, sessionmaker)
+
+    for _ in range(3):
+        await client.get(f"/api/audio/kana/{item_id}.mp3", headers=headers, follow_redirects=True)
+    assert built == 1, f"a client was constructed {built} times for three requests"
+    audio_router._provider.cache_clear()
 
 
 async def test_a_second_tap_does_not_synthesise_again(
@@ -87,8 +151,9 @@ async def test_a_second_tap_does_not_synthesise_again(
     monkeypatch.setattr(get_settings(), "audio_dir", str(tmp_path))
     headers, item_id = await _setup(client, sessionmaker)
 
-    assert (await client.get(f"/api/audio/kana/{item_id}.mp3", headers=headers)).status_code == 200
-    assert (await client.get(f"/api/audio/kana/{item_id}.mp3", headers=headers)).status_code == 200
+    for _ in range(2):
+        res = await client.get(f"/api/audio/kana/{item_id}.mp3", headers=headers, follow_redirects=True)
+        assert res.status_code == 200
     assert len(fake.calls) == 1, "tapping twice must not cost two syntheses"
 
 
@@ -98,6 +163,7 @@ async def test_audio_requires_a_learner(
     """Synthesis costs money. An unauthenticated caller must not be able to spend it."""
     _headers, item_id = await _setup(client, sessionmaker)
     assert (await client.get(f"/api/audio/kana/{item_id}.mp3")).status_code in (401, 403)
+    assert (await client.get(f"/api/audio/clips/{'a' * 64}.mp3")).status_code in (401, 403)
 
 
 async def test_an_unknown_format_is_a_404_not_a_crash(
