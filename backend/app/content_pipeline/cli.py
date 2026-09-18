@@ -1,4 +1,4 @@
-"""``nihongo-content`` typer CLI. Phase 1 adds the kana importer; vocab/grammar arrive with Phase 2."""
+"""``nihongo-content`` typer CLI: import, export, validate and warm the seed content."""
 
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ from app import __version__
 from app.config import get_settings
 from app.content_pipeline import warm_audio
 from app.content_pipeline.import_kana import import_kana
+from app.content_pipeline.kana_seed import load_all
+from app.content_pipeline.vocab_seed import load_vocab
 from app.db.base import get_engine, get_sessionmaker
 from app.services.progress_transfer import TransferReport, export_progress, import_progress
 
@@ -27,7 +29,45 @@ def version() -> None:
 
 
 @app.command()
-def check() -> None:
+def check(
+    seed_dir: Annotated[
+        Path | None,
+        typer.Option("--seed-dir", help="Validate the seeds in this directory instead of the shipped ones"),
+    ] = None,
+) -> None:
+    """Validate every seed file against its pydantic model. Touches no database.
+
+    This is the CI gate from docs/CONTENT.md: a malformed seed must fail before it can reach a
+    database, so this command deliberately needs neither a connection nor settings. ``doctor`` is
+    the one that talks to Postgres.
+    """
+
+    def _kana() -> str:
+        return ", ".join(f"{seed.script.value} {len(seed.kana)}" for seed in load_all(seed_dir=seed_dir))
+
+    def _vocab() -> str:
+        seed = load_vocab(seed_dir=seed_dir)
+        approved = sum(1 for entry in seed.vocab if entry.is_approved)
+        return f"{len(seed.vocab)} entries, {approved} approved"
+
+    # (OSError, ValueError) is the exhaustive set here and not a bare except: a missing file raises
+    # OSError, malformed JSON raises JSONDecodeError, and pydantic's ValidationError subclasses
+    # ValueError. Anything else is a bug in this code and should keep its traceback.
+    failures: list[str] = []
+    for label, probe in (("kana_*.json", _kana), ("vocab_core.json", _vocab)):
+        try:
+            typer.echo(f"{label}: {probe()} ok")
+        except (OSError, ValueError) as exc:
+            failures.append(f"{label}: {exc}")
+
+    for failure in failures:
+        typer.echo(failure, err=True)
+    if failures:
+        raise typer.Exit(1)
+
+
+@app.command()
+def doctor() -> None:
     """Verify database connectivity and print the configured models."""
     settings = get_settings()
 

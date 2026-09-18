@@ -37,7 +37,8 @@ database, that edit lives in exactly one place — which is the failure this des
 | `nihongo-content import-vocab` | upsert `vocab_core.json` on `slug`, plus its `items` hub rows |
 | `nihongo-content import-all` | every seed file, in curriculum order |
 | `nihongo-content export-kana` / `export-vocab` | database → seed JSON, keys sorted, stable formatting |
-| `nihongo-content check` | validate every seed file against its pydantic model and exit non-zero on failure — run it in CI so a malformed seed can never reach a database |
+| `nihongo-content check` | validate every seed file against its pydantic model and exit non-zero on failure — needs no database, and CI runs it before the Postgres steps so a malformed seed can never reach one. `--seed-dir` validates a candidate file in place |
+| `nihongo-content doctor` | the database-connectivity probe `check` used to be |
 | `nihongo-content warm-audio` | pre-synthesize every clip referenced by the seeds |
 
 ## Audio
