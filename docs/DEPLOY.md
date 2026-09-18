@@ -281,5 +281,6 @@ user's reach to exactly the checkout it deploys.
 | No certificate, connection refused on 443 | `docker compose … logs caddy` — usually DNS not resolving yet, or 80/443 blocked upstream |
 | Bot silent, `/healthz` fine | `getWebhookInfo` (step 3). A laptop instance that came back up is the usual thief |
 | `502` from `/api/*` | api container unhealthy: `docker compose … logs api`, then `alembic current` |
-| Lesson starts but offers nothing | the seed did not import: re-run `deploy.sh`, or `exec api nihongo-content import-kana` |
+| Lesson starts but offers nothing | the seed did not import: re-run `deploy.sh`, or `exec api nihongo-content import-all` |
+| Vocabulary imported but no vocab appears | expected until it is reviewed — `import-all` activates only `approved` entries. `select count(*) from items where type='vocab' and active;` |
 | Roll back | Revert the commit and merge the revert — same tests, same path. In a hurry: `su - deploy -c 'cd /opt/nihongo-tutor && git checkout <previous sha> && infra/scripts/deploy.sh --no-pull'`, which leaves the checkout detached — fine and temporary, because the next CI deploy runs `git checkout -q main` before anything else and rejoins on its own. Migrations are forward-only in practice — check `alembic downgrade` is safe before relying on it |

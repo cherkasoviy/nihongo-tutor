@@ -44,6 +44,9 @@ jobs:
       - run: uv run ruff check .
       - run: uv run black --check .
       - run: uv run mypy
+      # Before anything touches Postgres, by design: a malformed seed must fail here rather
+      # than halfway through an import on the production box. The command needs no database.
+      - run: uv run nihongo-content check
       - name: alembic upgrade head + drift check
         run: |
           uv run alembic upgrade head

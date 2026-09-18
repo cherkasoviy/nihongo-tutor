@@ -29,16 +29,29 @@ database, that edit lives in exactly one place — which is the failure this des
 4. **`export-*` is the audit.** After `export`, `git diff` empty means the database and the repo
    agree. A non-empty diff is either an edit to commit or drift to explain.
 
-## Commands to build
+## Commands
 
-| Command | Does |
-|---|---|
-| `nihongo-content import-kana` | exists |
-| `nihongo-content import-vocab` | upsert `vocab_core.json` on `slug`, plus its `items` hub rows |
-| `nihongo-content import-all` | every seed file, in curriculum order |
-| `nihongo-content export-kana` / `export-vocab` | database → seed JSON, keys sorted, stable formatting |
-| `nihongo-content check` | validate every seed file against its pydantic model and exit non-zero on failure — run it in CI so a malformed seed can never reach a database |
-| `nihongo-content warm-audio` | pre-synthesize every clip referenced by the seeds |
+| Command | Does | |
+|---|---|---|
+| `import-kana` | upsert the two kana seeds on `(script, char)`, plus their `items` rows | built |
+| `import-vocab` | upsert `vocab_core.json` on `slug`, plus its `items` hub rows. `--include-unreviewed` activates entries that are not yet approved — local development only | built |
+| `import-all` | every seed file, in curriculum order. This is what `deploy.sh` runs | built |
+| `export-vocab` | database → `vocab_core.json`. `--out` writes elsewhere | built |
+| `export-kana` | database → the kana seeds | **not built** — the remaining gap in rule 4 |
+| `import-pairs` | upsert `listening_pairs.json` on `slug` | **not built** — lands with `listen_choose`, and joins `import-all` then |
+| `check` | validate every seed file against its pydantic model, exit non-zero on failure. Needs no database, and CI runs it before the Postgres steps so a malformed seed can never reach one. `--seed-dir` validates a candidate file in place | built |
+| `doctor` | the database-connectivity probe `check` used to be | built |
+| `warm-audio` | pre-synthesize every clip the seeds imply: readings for isolated items, sentences as written | built |
+
+Field order in an export is the **authored** order, not alphabetical. Alphabetical would sort
+`curriculum_order` above `word` and turn every export into a four-thousand-line diff, which
+destroys the only thing rule 4 is for. `version`, `kind` and the prose `note` are carried over from
+the file on disk: they describe the file rather than any row, and no column holds them.
+
+One thing to know before writing `import-pairs`: `listening_pairs.json` does not round-trip
+today, because `pair:saka-sakka` lists `gloss_source` before `note_ru` while the other 21 pairs
+put it after. Normalise that key order in the same PR, or the first export will produce a diff
+that looks like drift and is not.
 
 ## Audio
 
@@ -49,15 +62,21 @@ written — see below):
 | | clips | characters |
 |---|---|---|
 | Kana syllables | 208 | 274 |
-| Their example words | 208 | 708 |
-| Vocabulary | 93 | 293 |
-| Their example sentences | 93 | 847 |
-| **Total, one encoding** | **602** | **2,122** |
-| **Total, both encodings** | **1,204** | **4,244** |
+| Their example words | 206 | 701 |
+| Vocabulary readings | 220 | 686 |
+| Their example sentences | 217 | 1,982 |
+| **Total, one encoding, deduplicated** | **803** | **3,515** |
+| **Total, both encodings** | **1,606** | **7,030** |
 
-That is **0.42% of the 1M-character monthly Neural2 free tier**. Audio on everything, regenerated
+Those are the numbers `warm_audio.seed_texts()` actually produces, not a sum of the rows: several
+kana share an example word, three sentences repeat, and a vocabulary reading can equal a kana
+example, so the deduplicated set is smaller than the parts.
+
+That is **0.70% of the 1M-character monthly Neural2 free tier**. Audio on everything, regenerated
 from scratch every single month, is free. Do not ration it, do not add it lazily "where it matters
-most" — synthesize the lot. Add the slow variant and it is still under 1%.
+most" — synthesize the lot. Adding the slow variant doubles it to **1.41%**, which is the first
+number here that is no longer negligible — still trivially affordable, but it is now worth
+generating the slow variant for what the learner actually replays rather than for all 803 clips.
 
 ### Synthesize the reading, never the written form
 
@@ -162,6 +181,23 @@ and wrong there; do not "fix" the kana seeds to match.
 
 Everything ships `gloss_review_status: "needs_review"` — the owner reads it and promotes it to
 `approved`, which is the point of the gate.
+
+### Tranche 2
+
+`vocab_core.json` now continues to `curriculum_order` 220. Tranche 2 (94 onward, 127 entries) adds
+demonstratives, everyday adverbs and set phrases, numbers one to ten plus 百/千/円, the days of the
+week, weather and nature, colours, home and personal objects, a second batch of verbs, body parts,
+places of work and the na-adjectives (`pos: adjective` with tag `na-adjective`, since the conjugation
+class is what the grammar stage will need, not a separate part of speech). New `pos` values are
+`adverb`, `numeral` and `determiner`.
+
+Ordering within the tranche is approximate i+1: an example sentence uses tranche-1 words and earlier
+tranche-2 words wherever possible, so the first time a learner sees 会社 the verb 働く in its
+sentence is already known. The audio budget grows by 3,104 characters for both encodings, to about
+0.73% of the free tier in total.
+
+Where a number's reading changes inside a compound, the example pins the compound: 四時 is よじ, 七時
+is しちじ, 九時 is くじ. That is the same argument as the Sudachi paragraph above, made by the data.
 
 ### What this tranche does not have yet
 

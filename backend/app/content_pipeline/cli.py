@@ -1,4 +1,4 @@
-"""``nihongo-content`` typer CLI. Phase 1 adds the kana importer; vocab/grammar arrive with Phase 2."""
+"""``nihongo-content`` typer CLI: import, export, validate and warm the seed content."""
 
 from __future__ import annotations
 
@@ -13,8 +13,12 @@ from sqlalchemy import text
 
 from app import __version__
 from app.config import get_settings
-from app.content_pipeline import warm_audio
+from app.content_pipeline import vocab_seed, warm_audio
+from app.content_pipeline.export_vocab import export_vocab
 from app.content_pipeline.import_kana import import_kana
+from app.content_pipeline.import_vocab import import_vocab
+from app.content_pipeline.kana_seed import load_all
+from app.content_pipeline.vocab_seed import load_vocab
 from app.db.base import get_engine, get_sessionmaker
 from app.services.progress_transfer import TransferReport, export_progress, import_progress
 
@@ -27,7 +31,45 @@ def version() -> None:
 
 
 @app.command()
-def check() -> None:
+def check(
+    seed_dir: Annotated[
+        Path | None,
+        typer.Option("--seed-dir", help="Validate the seeds in this directory instead of the shipped ones"),
+    ] = None,
+) -> None:
+    """Validate every seed file against its pydantic model. Touches no database.
+
+    This is the CI gate from docs/CONTENT.md: a malformed seed must fail before it can reach a
+    database, so this command deliberately needs neither a connection nor settings. ``doctor`` is
+    the one that talks to Postgres.
+    """
+
+    def _kana() -> str:
+        return ", ".join(f"{seed.script.value} {len(seed.kana)}" for seed in load_all(seed_dir=seed_dir))
+
+    def _vocab() -> str:
+        seed = load_vocab(seed_dir=seed_dir)
+        approved = sum(1 for entry in seed.vocab if entry.is_approved)
+        return f"{len(seed.vocab)} entries, {approved} approved"
+
+    # (OSError, ValueError) is the exhaustive set here and not a bare except: a missing file raises
+    # OSError, malformed JSON raises JSONDecodeError, and pydantic's ValidationError subclasses
+    # ValueError. Anything else is a bug in this code and should keep its traceback.
+    failures: list[str] = []
+    for label, probe in (("kana_*.json", _kana), ("vocab_core.json", _vocab)):
+        try:
+            typer.echo(f"{label}: {probe()} ok")
+        except (OSError, ValueError) as exc:
+            failures.append(f"{label}: {exc}")
+
+    for failure in failures:
+        typer.echo(failure, err=True)
+    if failures:
+        raise typer.Exit(1)
+
+
+@app.command()
+def doctor() -> None:
     """Verify database connectivity and print the configured models."""
     settings = get_settings()
 
@@ -43,7 +85,7 @@ def check() -> None:
 def warm_audio_command(
     slow: Annotated[bool, typer.Option(help="Also pre-generate the slow (prosody-rate) variant")] = False,
 ) -> None:
-    """Pre-generate every clip the kana seeds imply. Safe to re-run; cached clips cost nothing."""
+    """Pre-generate every clip the seeds imply. Safe to re-run; cached clips cost nothing."""
 
     async def _run() -> None:
         from app.speech.google_tts import GoogleTTS
@@ -80,6 +122,83 @@ def import_kana_command() -> None:
         typer.echo(f"kana rows upserted: {report.kana_seen}; item rows upserted: {report.items_seen}")
 
     asyncio.run(_run())
+
+
+_INCLUDE_UNREVIEWED = typer.Option(
+    "--include-unreviewed",
+    help="Activate entries that are not yet approved. Local development only — see docs/CONTENT.md rule 3",
+)
+
+
+@app.command("import-vocab")
+def import_vocab_command(include_unreviewed: Annotated[bool, _INCLUDE_UNREVIEWED] = False) -> None:
+    """Import (or refresh) the vocabulary seed. Safe to re-run: upserts on `slug`.
+
+    Every entry lands in the database. Only `approved` ones become active items the planner can
+    reach, which is the review gate: a learner cannot detect a subtly wrong Japanese sentence, so
+    they would simply learn it.
+    """
+
+    async def _run() -> None:
+        async with get_sessionmaker()() as session:
+            report = await import_vocab(session, include_unreviewed=include_unreviewed)
+            await session.commit()
+        typer.echo(
+            f"vocab rows upserted: {report.vocab_seen}; item rows upserted: {report.items_seen}; "
+            f"active: {report.active}"
+        )
+        if not report.active:
+            typer.echo(
+                "nothing is active: every entry is still awaiting review. "
+                "Pass --include-unreviewed locally, or approve entries in the seed.",
+                err=True,
+            )
+
+    asyncio.run(_run())
+
+
+@app.command("import-all")
+def import_all_command(include_unreviewed: Annotated[bool, _INCLUDE_UNREVIEWED] = False) -> None:
+    """Import every seed file, in curriculum order. This is what `deploy.sh` runs.
+
+    Kana first, then vocabulary: the order matches `curriculum_order`, so a half-finished run always
+    leaves the earlier stage complete. The listening pairs join this list with `listen_choose`.
+    """
+
+    async def _run() -> None:
+        async with get_sessionmaker()() as session:
+            kana = await import_kana(session)
+            vocab = await import_vocab(session, include_unreviewed=include_unreviewed)
+            await session.commit()
+        typer.echo(
+            f"kana: {kana.kana_seen} rows; vocab: {vocab.vocab_seen} rows ({vocab.active} active); "
+            f"items: {kana.items_seen + vocab.items_seen}"
+        )
+
+    asyncio.run(_run())
+
+
+@app.command("export-vocab")
+def export_vocab_command(
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", "-o", help="Where to write; defaults to the seed file itself"),
+    ] = None,
+) -> None:
+    """Write the vocabulary rows back to `vocab_core.json`. `git diff` afterwards is the audit.
+
+    Empty diff means the database and the repo agree. A non-empty one is either an edit to commit
+    or drift to explain.
+    """
+
+    async def _render() -> str:
+        async with get_sessionmaker()() as session:
+            return await export_vocab(session)
+
+    text_out = asyncio.run(_render())
+    destination = out or (vocab_seed.SEED_DIR / vocab_seed.SEED_FILE)
+    destination.write_text(text_out, encoding="utf-8")
+    typer.echo(f"wrote {destination}: {text_out.count(chr(10))} lines")
 
 
 @app.command("export-progress")

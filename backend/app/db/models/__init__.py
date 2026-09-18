@@ -2,7 +2,7 @@
 
 from app.db.models.ai import AiUsageLedger
 from app.db.models.audio import AudioAsset
-from app.db.models.content import Item, ItemStage, ItemType, Kana, KanaKind, KanaScript
+from app.db.models.content import Item, ItemStage, ItemType, Kana, KanaKind, KanaScript, Vocab
 from app.db.models.learning import (
     Card,
     CardDirection,
@@ -48,4 +48,5 @@ __all__ = [
     "User",
     "UserRole",
     "UserStatus",
+    "Vocab",
 ]

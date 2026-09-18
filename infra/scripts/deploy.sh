@@ -69,8 +69,10 @@ case "$cred_state" in
     exit 1 ;;
 esac
 
-echo "==> importing the kana seed (upserts on natural keys; safe every deploy)"
-"${COMPOSE[@]}" exec -T api nihongo-content import-kana
+# No --include-unreviewed, ever, on this box. It is what keeps an unreviewed gloss out of her
+# lessons: the rows import either way, but only `approved` ones become items the planner can reach.
+echo "==> importing every seed (upserts on natural keys; safe every deploy)"
+"${COMPOSE[@]}" exec -T api nihongo-content import-all
 
 DOMAIN="$(grep -E '^DOMAIN=' infra/.env | cut -d= -f2-)"
 if [[ -n "$DOMAIN" ]]; then

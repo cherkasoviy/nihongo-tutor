@@ -8,7 +8,7 @@ UV := cd $(BACKEND) && uv run
 COMPOSE_DEV := docker compose -f infra/docker-compose.dev.yml
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file infra/.env
 
-.PHONY: help setup dev api worker miniapp db-up db-down test test-unit lint fmt typecheck check \
+.PHONY: help setup dev api worker miniapp db-up db-down test test-unit lint fmt typecheck check seed-check \
         migrate revision downgrade openapi gen-api seed fetch-kanjivg gen-content compose-up compose-down \
         compose-logs deploy backup
 
@@ -65,7 +65,10 @@ fmt: ## Auto-format backend
 typecheck: ## mypy strict on backend/app
 	$(UV) mypy
 
-check: lint typecheck test ## Everything CI runs
+seed-check: ## Validate every seed file against its pydantic model (needs no database)
+	$(UV) nihongo-content check
+
+check: lint typecheck seed-check test ## Everything CI runs
 
 # --- database ----------------------------------------------------------------
 migrate: ## alembic upgrade head
@@ -93,7 +96,8 @@ fetch-kanjivg: ## Download KanjiVG stroke-order SVGs for kana into miniapp/publi
 	@bash infra/scripts/fetch_kanjivg.sh
 
 gen-content: ## Run AI content generation batches
-	@echo "content generation arrives with Phase 2 (see docs/PLAN.md)"; $(UV) nihongo-content check
+	@echo "AI content generation is not built yet (see docs/PLAN.md); validating the hand-authored seeds instead"
+	@$(MAKE) --no-print-directory seed-check
 
 # --- production --------------------------------------------------------------
 compose-up: ## Build and start the production stack (needs infra/.env)
