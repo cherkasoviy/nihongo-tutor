@@ -29,17 +29,29 @@ database, that edit lives in exactly one place — which is the failure this des
 4. **`export-*` is the audit.** After `export`, `git diff` empty means the database and the repo
    agree. A non-empty diff is either an edit to commit or drift to explain.
 
-## Commands to build
+## Commands
 
-| Command | Does |
-|---|---|
-| `nihongo-content import-kana` | exists |
-| `nihongo-content import-vocab` | upsert `vocab_core.json` on `slug`, plus its `items` hub rows |
-| `nihongo-content import-all` | every seed file, in curriculum order |
-| `nihongo-content export-kana` / `export-vocab` | database → seed JSON, keys sorted, stable formatting |
-| `nihongo-content check` | validate every seed file against its pydantic model and exit non-zero on failure — needs no database, and CI runs it before the Postgres steps so a malformed seed can never reach one. `--seed-dir` validates a candidate file in place |
-| `nihongo-content doctor` | the database-connectivity probe `check` used to be |
-| `nihongo-content warm-audio` | pre-synthesize every clip referenced by the seeds |
+| Command | Does | |
+|---|---|---|
+| `import-kana` | upsert the two kana seeds on `(script, char)`, plus their `items` rows | built |
+| `import-vocab` | upsert `vocab_core.json` on `slug`, plus its `items` hub rows. `--include-unreviewed` activates entries that are not yet approved — local development only | built |
+| `import-all` | every seed file, in curriculum order. This is what `deploy.sh` runs | built |
+| `export-vocab` | database → `vocab_core.json`. `--out` writes elsewhere | built |
+| `export-kana` | database → the kana seeds | **not built** — the remaining gap in rule 4 |
+| `import-pairs` | upsert `listening_pairs.json` on `slug` | **not built** — lands with `listen_choose`, and joins `import-all` then |
+| `check` | validate every seed file against its pydantic model, exit non-zero on failure. Needs no database, and CI runs it before the Postgres steps so a malformed seed can never reach one. `--seed-dir` validates a candidate file in place | built |
+| `doctor` | the database-connectivity probe `check` used to be | built |
+| `warm-audio` | pre-synthesize every clip the seeds imply: readings for isolated items, sentences as written | built |
+
+Field order in an export is the **authored** order, not alphabetical. Alphabetical would sort
+`curriculum_order` above `word` and turn every export into a four-thousand-line diff, which
+destroys the only thing rule 4 is for. `version`, `kind` and the prose `note` are carried over from
+the file on disk: they describe the file rather than any row, and no column holds them.
+
+One thing to know before writing `import-pairs`: `listening_pairs.json` does not round-trip
+today, because `pair:saka-sakka` lists `gloss_source` before `note_ru` while the other 21 pairs
+put it after. Normalise that key order in the same PR, or the first export will produce a diff
+that looks like drift and is not.
 
 ## Audio
 
