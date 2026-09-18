@@ -50,15 +50,21 @@ written — see below):
 | | clips | characters |
 |---|---|---|
 | Kana syllables | 208 | 274 |
-| Their example words | 208 | 708 |
-| Vocabulary | 93 | 293 |
-| Their example sentences | 93 | 847 |
-| **Total, one encoding** | **602** | **2,122** |
-| **Total, both encodings** | **1,204** | **4,244** |
+| Their example words | 206 | 701 |
+| Vocabulary readings | 220 | 686 |
+| Their example sentences | 217 | 1,982 |
+| **Total, one encoding, deduplicated** | **803** | **3,515** |
+| **Total, both encodings** | **1,606** | **7,030** |
 
-That is **0.42% of the 1M-character monthly Neural2 free tier**. Audio on everything, regenerated
+Those are the numbers `warm_audio.seed_texts()` actually produces, not a sum of the rows: several
+kana share an example word, three sentences repeat, and a vocabulary reading can equal a kana
+example, so the deduplicated set is smaller than the parts.
+
+That is **0.70% of the 1M-character monthly Neural2 free tier**. Audio on everything, regenerated
 from scratch every single month, is free. Do not ration it, do not add it lazily "where it matters
-most" — synthesize the lot. Add the slow variant and it is still under 1%.
+most" — synthesize the lot. Adding the slow variant doubles it to **1.41%**, which is the first
+number here that is no longer negligible — still trivially affordable, but it is now worth
+generating the slow variant for what the learner actually replays rather than for all 803 clips.
 
 ### Synthesize the reading, never the written form
 

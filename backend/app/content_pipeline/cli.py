@@ -85,7 +85,7 @@ def doctor() -> None:
 def warm_audio_command(
     slow: Annotated[bool, typer.Option(help="Also pre-generate the slow (prosody-rate) variant")] = False,
 ) -> None:
-    """Pre-generate every clip the kana seeds imply. Safe to re-run; cached clips cost nothing."""
+    """Pre-generate every clip the seeds imply. Safe to re-run; cached clips cost nothing."""
 
     async def _run() -> None:
         from app.speech.google_tts import GoogleTTS
